@@ -12,10 +12,16 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
+            $table->ulid('id')->primary();
+            $table->string('first_name');
+            $table->string('last_name');
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
+            $table->string('phone')->unique();
+          
+          // $table->foreignUlid('city_id')->constrained()->onDelete('cascade');
+            $table->string('settings_language')->default('en');
+            $table->string('settings_theme')->default('light');
             $table->string('password');
             $table->rememberToken();
             $table->timestamps();
@@ -27,14 +33,17 @@ return new class extends Migration
             $table->timestamp('created_at')->nullable();
         });
 
-        Schema::create('sessions', function (Blueprint $table) {
-            $table->string('id')->primary();
-            $table->foreignId('user_id')->nullable()->index();
-            $table->string('ip_address', 45)->nullable();
-            $table->text('user_agent')->nullable();
-            $table->longText('payload');
-            $table->integer('last_activity')->index();
-        });
+        // Schema::create('sessions', function (Blueprint $table) {
+        //     $table->ulid('id')->primary();
+
+        //     // التصحيح: استخدم foreignUlid وتأكد من الربط مع جدول users إذا أردت القيد (Constraint)
+        //     $table->foreignUlid('user_id')->nullable()->index()->constrained('users')->onDelete('cascade');
+
+        //     $table->string('ip_address', 45)->nullable();
+        //     $table->text('user_agent')->nullable();
+        //     $table->longText('payload');
+        //     $table->integer('last_activity')->index();
+        // });
     }
 
     /**
