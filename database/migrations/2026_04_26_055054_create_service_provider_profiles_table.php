@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('service_provider_profiles', function (Blueprint $table) {
             $table->ulid('id')->primary();
-            $table->foreignUlid('user_id')->constrained('users')->onDelete('cascade');
+            $table->foreignUlid('user_id')->constrained()->onDelete('cascade');
             $table->string('company_name');
             $table->string('company_description');
             $table->string('portfolio_url')->nullable();
@@ -31,3 +31,4 @@ return new class extends Migration
         Schema::dropIfExists('service_provider_profiles');
     }
 };
+

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use App\Models\ServiceProviderProfile;
 
 class User extends Authenticatable
 {
@@ -20,10 +21,15 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
-        'name',
-        'email',
-        'password',
-    ];
+    'first_name',
+    'last_name',
+    'email',
+    'phone',
+    'city_id',
+    'password',
+    'settings_language',
+    'settings_theme',
+];
 
     /**
      * The attributes that should be hidden for serialization.
@@ -46,5 +52,18 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+    function serviceProviderProfile(){
+        return $this->hasOne(ServiceProviderProfile::class);
+    }
+    function city(){
+        return $this->belongsTo(City::class);
+    }   
+    function images(){
+        return $this->morphMany(Image::class,'imageable');
+    }
+    public function addresses()
+    {
+        return $this->morphMany(Address::class, 'addresable');
     }
 }
