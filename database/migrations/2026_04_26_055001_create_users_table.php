@@ -1,3 +1,4 @@
+
 <?php
 
 use Illuminate\Database\Migrations\Migration;
@@ -19,7 +20,7 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->string('phone')->unique();
           
-          // $table->foreignUlid('city_id')->constrained()->onDelete('cascade');
+         $table->foreignUlid('city_id')->constrained()->onDelete('cascade');
             $table->string('settings_language')->default('en');
             $table->string('settings_theme')->default('light');
             $table->string('password');
@@ -33,17 +34,16 @@ return new class extends Migration
             $table->timestamp('created_at')->nullable();
         });
 
-        // Schema::create('sessions', function (Blueprint $table) {
-        //     $table->ulid('id')->primary();
+        Schema::create('sessions', function (Blueprint $table) {
+            $table->ulid('id')->primary();
 
-        //     // التصحيح: استخدم foreignUlid وتأكد من الربط مع جدول users إذا أردت القيد (Constraint)
-        //     $table->foreignUlid('user_id')->nullable()->index()->constrained('users')->onDelete('cascade');
+            $table->foreignUlid('user_id')->nullable()->index()->constrained('users')->onDelete('cascade');
 
-        //     $table->string('ip_address', 45)->nullable();
-        //     $table->text('user_agent')->nullable();
-        //     $table->longText('payload');
-        //     $table->integer('last_activity')->index();
-        // });
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
+            $table->longText('payload');
+            $table->integer('last_activity')->index();
+        });
     }
 
     /**
@@ -56,3 +56,6 @@ return new class extends Migration
         Schema::dropIfExists('sessions');
     }
 };
+
+
+
