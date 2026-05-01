@@ -18,12 +18,14 @@ return new class extends Migration
             $table->string('last_name');
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
-            $table->string('phone')->unique();
+            $table->string('phone')->unique()->nullable();
           
-         $table->foreignUlid('city_id')->constrained()->onDelete('cascade');
+         $table->foreignUlid('city_id')->nullable()->constrained()->onDelete('cascade');
             $table->string('settings_language')->default('en');
             $table->string('settings_theme')->default('light');
-            $table->string('password');
+            $table->string('password')->nullable();
+            $table->string('provider')->nullable();
+            $table->string('provider_id')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });

@@ -15,11 +15,12 @@ use App\Models\ServiceProviderProfile;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, HasUlids, HasRoles;
+    use HasFactory, Notifiable, HasUlids, HasRoles,HasApiTokens;
 
     /**
      * الحقول القابلة للتعبئة.
@@ -34,6 +35,8 @@ class User extends Authenticatable
         'city_id',
         'password',
         'settings_language',
+        'provider',
+        'provider_id',
         'settings_theme',
     ];
 
