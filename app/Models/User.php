@@ -12,15 +12,18 @@ use Spatie\Permission\Traits\HasRoles;
 
 
 use App\Models\ServiceProviderProfile;
+use Illuminate\Auth\Passwords\CanResetPassword;
+use Illuminate\Contracts\Auth\CanResetPassword as AuthCanResetPassword;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Laravel\Sanctum\HasApiTokens;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail,AuthCanResetPassword
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, HasUlids, HasRoles,HasApiTokens;
+    use HasFactory, Notifiable, HasUlids, HasRoles,HasApiTokens,CanResetPassword;
 
     /**
      * الحقول القابلة للتعبئة.
@@ -66,7 +69,7 @@ class User extends Authenticatable
     /**
      * تحديد الـ Guard الافتراضي لـ Spatie.
      */
-    protected $guard_name = 'web';
+    protected $guard_name = 'api';
 
     // --- العلاقات (Relationships) ---
 
