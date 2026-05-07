@@ -20,10 +20,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Laravel\Sanctum\HasApiTokens;
 
-class User extends Authenticatable implements MustVerifyEmail,AuthCanResetPassword
+class User extends Authenticatable implements MustVerifyEmail, AuthCanResetPassword
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, HasUlids, HasRoles,HasApiTokens,CanResetPassword;
+    use HasFactory, Notifiable, HasUlids, HasRoles, HasApiTokens, CanResetPassword;
 
     /**
      * الحقول القابلة للتعبئة.
@@ -102,7 +102,13 @@ class User extends Authenticatable implements MustVerifyEmail,AuthCanResetPasswo
      */
     public function addresses(): MorphMany
     {
-        
+
         return $this->morphMany(Address::class, 'addressable');
+    }
+    public function markPhoneAsVerified()
+    {
+        return $this->forceFill([
+            'phone_verified_at' => $this->freshTimestamp(),
+        ])->save();
     }
 }
