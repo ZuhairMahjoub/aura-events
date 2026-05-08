@@ -16,11 +16,12 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->string('first_name');
             $table->string('last_name');
-            $table->string('email')->unique();
+            $table->string('email')->unique()->nullable();
             $table->timestamp('email_verified_at')->nullable();
+            $table->timestamp('phone_verified_at')->nullable();
             $table->string('phone')->unique()->nullable();
-          
-         $table->foreignUlid('city_id')->nullable()->constrained()->onDelete('cascade');
+        //    $table->boolean('is_active')->default(false);
+        //  $table->foreignUlid('city_id')->nullable()->constrained()->onDelete('cascade');
             $table->string('settings_language')->default('en');
             $table->string('settings_theme')->default('light');
             $table->string('password')->nullable();

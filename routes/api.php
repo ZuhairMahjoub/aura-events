@@ -3,6 +3,8 @@
 use App\Http\Controllers\AuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Auth\AuthController as AuthAuthController; // تأكد من وجود هذا السطر فوق
+use App\Http\Controllers\Auth\OtpController; // تأكد من وجود هذا السطر فوق
 
 // --- مسارات Breeze الجديدة (Password Reset, Verification, etc) ---
 require __DIR__.'/auth.php'; 
@@ -19,9 +21,16 @@ Route::middleware(['auth:sanctum'])->group(function () {
         return $request->user();
     });
 });
-Route::post('/register', [AuthController::class, 'store'])
-    ->middleware('guest');
+// Route::post('/register', [AuthController::class, 'store'])
+//     ->middleware('guest');
 
-// مسار تسجيل الدخول (Login) للحصول على الـ Token
-Route::post('/login', [AuthController::class, 'login'])
-    ->middleware('guest');
+// // مسار تسجيل الدخول (Login) للحصول على الـ Token
+// Route::post('/login', [AuthController::class, 'login'])
+//     ->middleware('guest');
+
+    // مسار التسجيل الأساسي
+Route::post('/register', [AuthAuthController::class, 'register']);
+// مسار التحقق من الكود (الذي كتبناه في OtpController)  requestRegistration
+Route::post('/verify-otp', [AuthAuthController::class, 'verifyOtp']);
+// مسار تسجيل الدخول
+Route::post('/login', [AuthAuthController::class, 'login']);
