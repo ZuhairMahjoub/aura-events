@@ -7,14 +7,14 @@ use App\Services\OtpService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
 
-class SendOtpNotification
+class SendOtpNotification implements ShouldQueue
 {
     use InteractsWithQueue;
-
+public $tries = 1;
     protected OtpService $otpService;
 
     /**
-     * إنشاء الـ Listener وحقن خدمة الـ OTP
+     * حقن خدمة الـ OTP
      */
     public function __construct(OtpService $otpService)
     {
@@ -24,19 +24,14 @@ class SendOtpNotification
     /**
      * معالجة الحدث وإرسال الرمز
      */
-    public function handle(UserRegistered $event)
+    public function handle(UserRegistered $event): void
     {
-        // التأكد أن القناة هي الهاتف وأن المستخدم لديه رقم هاتف فعلاً
-        if ($event->channel === 'phone' && $event->user->phone) {
+        if ($event->user->phone) {
 
-            // تأكد من تنظيف الرقم قبل التعامل معه (تنسيق دولي)
-            // إذا كانت الدالة في الـ OtpService استخدمها مباشرة
             $phone = $event->user->phone;
 
-            // 1. توليد الرمز وتخزينه
             $code = $this->otpService->generateForPhone($phone);
 
-            // 2. إرسال الرمز عبر الواتساب
             $this->otpService->sendViaWhatsapp($phone, $code);
         }
     }

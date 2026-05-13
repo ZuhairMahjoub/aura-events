@@ -9,50 +9,60 @@ use Illuminate\Support\Str;
 class AuthService
 {
     /**
-     * إنشاء مستخدم جديد في قاعدة البيانات باستخدام ULID.
      */
     public function createUser(array $data): User
     {
         return User::create([
-            'id'                => (string) Str::ulid(), // استخدام ULID كـ Primary Key
-            'first_name'        => $data['first_name'],
-            'last_name'         => $data['last_name'],
-            'email'             => $data['email'] ?? null, // مرونة لإضافة الإيميل لاحقاً
-            'phone'             => $data['phone'], // الحقل الفريد للـ OTP حالياً
-            'password'          => Hash::make($data['password']),
-            // 'city_id'           => $data['city_id'],
+            'id'                => (string) Str::ulid(), 
+            
+            'first_name'        => $data['first_name'] ?? 'Google',
+            'last_name'         => $data['last_name'] ?? 'User',
+            
+            'email'             => $data['email'] ?? null,
+            'phone'             => $data['phone'] ?? null,
+            
+            'password'          => Hash::needsRehash($data['password']) 
+                                    ? Hash::make($data['password']) 
+                                    : $data['password'],
+            
             'settings_language' => $data['settings_language'] ?? 'ar',
             'settings_theme'    => $data['settings_theme'] ?? 'light',
         ]);
     }
 
+    /**
+     */
     public function formatPhone(string $phone): string
     {
         return preg_replace('/\D/', '', $phone);
     }
     
-   public function login(array $data)
-{
-    // تنظيف الرقم القادم من الطلب لضمان أنه بصيغة أرقام فقط
-    $cleanPhone = preg_replace('/\D/', '', $data['phone']); 
+    /**
+     */
+    public function login(array $data)
+    {
+        $identity = $data['identity'] ?? ($data['phone'] ?? null); 
+        
+        if (!$identity) return null;
 
-    // البحث عن الرقم سواء كان مخزناً بـ + أو بدونها في قاعدة البيانات
-    $user = User::where('phone', $data['phone']) // البحث كما جاء من Postman
-                ->orWhere('phone', $cleanPhone)  // البحث بدون الزائد
-                ->first();
+        $cleanIdentity = preg_replace('/\D/', '', $identity); 
 
-    if (!$user || !Hash::check($data['password'], $user->password)) {
-        return null; 
+        $user = User::where('email', $identity)
+                    ->orWhere('phone', $identity)
+                    ->orWhere('phone', $cleanIdentity)
+                    ->first();
+
+        if (!$user || !Hash::check($data['password'], $user->password)) {
+            return null; 
+        }
+
+        $user->tokens()->delete();
+
+        $token = $user->createToken('auth_token', ['*'], now()->addMonth())->plainTextToken;
+
+        return [
+            'user'  => $user,
+            'token' => $token
+        ];
     }
-
-    // الشغل الصح: حذف التوكنات القديمة
-    $user->tokens()->delete();
-
-    $token = $user->createToken('mobile_token', ['*'], now()->addMonth())->plainTextToken;
-
-    return [
-        'user'  => $user,
-        'token' => $token
-    ];
-}
 }

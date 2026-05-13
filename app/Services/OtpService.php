@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
@@ -7,29 +8,22 @@ use Illuminate\Support\Facades\Log;
 
 class OtpService
 {
-    /**
-     * تنظيف وتوحيد صيغة رقم الهاتف.
-     */
     public function formatPhone(string $phone): string
     {
         return preg_replace('/[^0-9]/', '', $phone);
     }
 
-    /**
-     * إرسال رمز التحقق عبر WhatsApp باستخدام UltraMsg.
-     */
     public function sendViaWhatsapp(string $phone, string $code): bool
     {
         $formattedPhone = $this->formatPhone($phone);
-
-        $instanceId = env('ULTRAMSG_INSTANCE_ID');
-        $token = env('ULTRAMSG_TOKEN');
-        $baseUrl = rtrim(env('ULTRAMSG_BASE_URL', 'https://api.ultramsg.com'), '/');
+        $instanceId = config('services.ultramsg.instance_id');
+        $token      = config('services.ultramsg.token');
+        $baseUrl    = rtrim(config('services.ultramsg.base_url', 'https://api.ultramsg.com'), '/');
 
         $url = "{$baseUrl}/{$instanceId}/messages/chat";
 
         try {
-            $response = Http::withOptions(['verify' => false])
+            $response = Http::withOptions(['verify' => false]) 
                 ->timeout(30)
                 ->asForm()
                 ->post($url, [
@@ -38,13 +32,7 @@ class OtpService
                     'body'  => "كود التحقق الخاص بك لمشروع Aura Events هو: {$code}",
                 ]);
 
-            if ($response->successful()) {
-                Log::info("OTP sent successfully to {$formattedPhone}");
-                return true;
-            }
-
-            Log::error("UltraMsg API error: " . $response->body());
-            return false;
+            return $response->successful();
 
         } catch (\Exception $e) {
             Log::error("WhatsApp connection failed: " . $e->getMessage());
@@ -52,9 +40,6 @@ class OtpService
         }
     }
 
-    /**
-     * توليد رمز عشوائي وتخزينه.
-     */
     public function generateForPhone(string $phone): int
     {
         $formattedPhone = $this->formatPhone($phone);
@@ -66,7 +51,6 @@ class OtpService
     }
 
     /**
-     * التحقق من صحة الكود.
      */
     public function verifyOtp(string $phone, string $code): bool
     {
@@ -75,9 +59,8 @@ class OtpService
 
         $storedCode = Cache::get($cacheKey);
         
-        // استخدام == مع تحويل النوع لضمان المطابقة حتى لو أرسل الفرونت آند string
         if ($storedCode && (string)$storedCode === (string)$code) {
-            Cache::forget($cacheKey);
+            Cache::forget($cacheKey); 
             return true;
         }
 
