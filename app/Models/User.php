@@ -34,6 +34,7 @@ class User extends Authenticatable implements MustVerifyEmail, AuthCanResetPassw
         'first_name',
         'last_name',
         'email',
+        'phone_verified_at',
         'phone',
         'city_id',
         'password',
@@ -62,6 +63,7 @@ class User extends Authenticatable implements MustVerifyEmail, AuthCanResetPassw
     {
         return [
             'email_verified_at' => 'datetime',
+            'phone_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
@@ -80,6 +82,10 @@ class User extends Authenticatable implements MustVerifyEmail, AuthCanResetPassw
     {
         return $this->hasOne(ServiceProviderProfile::class);
     }
+    public function hasVerifiedPhone(): bool
+{
+    return ! is_null($this->phone_verified_at);
+}
 
     /**
      * 

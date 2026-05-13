@@ -10,16 +10,12 @@ class UserRegistered
 {
     use Dispatchable, SerializesModels;
 
-    public User $user;
-    public string $channel;
-
     /**
-     * @param User $user المستخدم الذي تم إنشاؤه
-     * @param string $channel القناة المستخدمة (phone أو email)
+     * جعلنا المستخدم public لكي يصل إليه الـ Listeners بسهولة.
+     * تم حذف الـ channel لأن الـ Listeners ستعرف القناة من بيانات المستخدم نفسه.
      */
-    public function __construct(User $user, string $channel = 'phone')
+    public function __construct(public User $user)
     {
-        $this->user = $user;
-        $this->channel = $channel;
+        //
     }
 }
