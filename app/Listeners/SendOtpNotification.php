@@ -18,6 +18,7 @@ class SendOtpNotification implements ShouldQueue // إضافة التوجيه ل
         $this->otpService = $otpService;
     }
 
+
     public function handle(UserRegistered $event): void
     {
         $user = $event->user;
