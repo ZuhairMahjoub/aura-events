@@ -23,7 +23,6 @@ class AuthController extends Controller
 {
     protected $authService;
   protected $otpService;
-// حقن الخدمة عبر الـ Constructor
 public function __construct(
         \App\Services\AuthService $authService, 
         \App\Services\OtpService $otpService
@@ -71,6 +70,39 @@ public function __construct(
 
    
 
+// public function store(Request $request)
+// {
+//     $validatedData = $request->validate([
+//         'first_name' => 'required|string|max:255',
+//         'last_name'  => 'required|string|max:255',
+//         'identity'   => 'required', 
+//         'password'   => 'required|string|min:8|confirmed',
+//     ]);
+
+//     $identity = $validatedData['identity'];
+//     $isEmail = filter_var($identity, FILTER_VALIDATE_EMAIL);
+//     $cleanIdentity = !$isEmail ? $this->authService->formatPhone($identity) : $identity;
+
+//     $userData = [
+//         'first_name' => $validatedData['first_name'],
+//         'last_name'  => $validatedData['last_name'],
+//         'password'   => $validatedData['password'],
+//         'email'      => $isEmail ? $cleanIdentity : null,
+//         'phone'      => !$isEmail ? $cleanIdentity : null,
+//     ];
+
+//     $user = $this->authService->createUser($userData);
+
+//     event(new UserRegistered($user));
+
+//     return response()->json([
+//         'status'  => 'success',
+//         'message' => 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر الكود المرسل إلى ' . ($isEmail ? 'بريدك' : 'هاتفك'),
+//         'data'    => [
+//             'user' => $user
+//         ]
+//     ], 201);
+// }
 public function store(Request $request)
 {
     $validatedData = $request->validate([
@@ -92,21 +124,35 @@ public function store(Request $request)
         'phone'      => !$isEmail ? $cleanIdentity : null,
     ];
 
-    $user = $this->authService->createUser($userData);
+    try {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($userData, $isEmail) {
+            
+            $user = $this->authService->createUser($userData);
 
-    event(new UserRegistered($user));
+            event(new UserRegistered($user));
 
-    return response()->json([
-        'status'  => 'success',
-        'message' => 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر الكود المرسل إلى ' . ($isEmail ? 'بريدك' : 'هاتفك'),
-        'data'    => [
-            'user' => $user
-        ]
-    ], 201);
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر الكود المرسل إلى ' . ($isEmail ? 'بريدك' : 'هاتفك'),
+                'data'    => [
+                    'user' => $user
+                ]
+            ], 201);
+        });
+
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error("Registration Failed: " . $e->getMessage());
+
+        return response()->json([
+            'status'  => 'error',
+            'message' => 'حدث خطأ أثناء إنشاء الحساب، يرجى المحاولة لاحقاً.',
+            'debug'   => config('app.debug') ? $e->getMessage() : null 
+        ], 500);
+    }
 }
 
-    
-    public function login(Request $request)
+ 
+public function login(Request $request)
 {
     $credentials = $request->validate([
         'identity' => 'required', 
@@ -127,9 +173,17 @@ public function store(Request $request)
 
     $user = $result['user'];
 
-    
-    $accessToken = $user->createToken('access_token', ['access-api'], now()->addMinutes(15))->plainTextToken;
+    if (is_null($user->email_verified_at) && is_null($user->phone_verified_at)) {
+        return response()->json([
+            'status'  => 'error',
+            'message' => 'عذراً، يجب تفعيل الحساب أولاً عبر الكود المرسل إليك.',
+            'is_verified' => false //      
+        ], 403); 
+    }
 
+    $user->tokens()->delete();
+
+    $accessToken = $user->createToken('access_token', ['access-api'], now()->addMinutes(15))->plainTextToken;
     $refreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
 
     return response()->json([
@@ -309,7 +363,11 @@ public function refresh(Request $request)
 {
     $user = $request->user();
 
-    $user->tokens()->delete();
+    $currentToken = $user->currentAccessToken();
+
+    if ($currentToken) {
+        $currentToken->delete();
+    }
 
     $newAccessToken = $user->createToken('access_token', ['access-api'], now()->addMinutes(15))->plainTextToken;
     $newRefreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
@@ -321,5 +379,15 @@ public function refresh(Request $request)
             'refresh_token' => $newRefreshToken,
         ]
     ]);
+}
+public function logout(Request $request)
+{
+    
+    $request->user()->tokens()->delete();
+
+    return response()->json([
+        'status' => 'success',
+        'message' => 'تم تسجيل الخروج بنجاح وإبطال جميع المفاتيح'
+    ], 200);
 }
 }
