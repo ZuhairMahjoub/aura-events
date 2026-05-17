@@ -11,20 +11,19 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('cities', function (Blueprint $table) {
-            $table->ulid('id')->primary();
-            $table->foreignUlid('governorate_id')->constrained('governorates')->onDelete('cascade');
-            $table->string('name_en');
+        Schema::create('districts', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('governorate_id')->constrained('governorates')->onDelete('cascade');
             $table->string('name_ar');
+            $table->string('name_en');
             $table->timestamps();
         });
     }
-
     /**
      * Reverse the migrations.
      */
     public function down(): void
     {
-        Schema::dropIfExists('cities');
+        Schema::dropIfExists('districts');
     }
 };

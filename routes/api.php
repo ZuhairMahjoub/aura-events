@@ -3,21 +3,21 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
-
-/*
-|--------------------------------------------------------------------------
-| API Routes - Aura Events Project (Professional Auth System)
-|--------------------------------------------------------------------------
-*/
+use App\Http\Controllers\ProviderAuthController;
+use App\Http\Controllers\Auth\VerifyEmailController;
+use App\Http\Middleware\EnsureAccountIsVerified;
+use App\Http\Middleware\EnsureProfileIsCompleted;
 
 Route::prefix('auth')->group(function () {
-    
-    Route::post('/register', [AuthController::class, 'store']); 
-    
-    Route::post('/login', [AuthController::class, 'login']);
-    
-    Route::post('/verify-otp', [AuthController::class, 'verifyOtp'])
-        ->middleware('throttle:verify-otp');
+    Route::post('/register/organizer', [AuthController::class, 'registerOrganizer']);
+    Route::post('/register/provider',  [AuthController::class, 'registerProvider']);
+
+    Route::post('/login', [AuthController::class, 'login'])
+        ->middleware('throttle:10,1');
+
+    Route::get('/email/verify/{id}/{hash}', [VerifyEmailController::class, '__invoke'])
+        ->middleware(['signed', 'throttle:6,1'])
+        ->name('verification.verify');
 
     Route::get('/google/redirect', [AuthController::class, 'redirectToGoogle']);
     Route::get('/google/callback', [AuthController::class, 'handleGoogleCallBack']);
@@ -26,23 +26,26 @@ Route::prefix('auth')->group(function () {
 
 Route::middleware(['auth:sanctum'])->group(function () {
 
-    /**
-     */
-    Route::middleware('abilities:issue-access-token')->group(function () {
-        Route::post('/auth/refresh', [AuthController::class, 'refresh']);
+    Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp'])
+        ->middleware(['ability:verify-account', 'throttle:verify-otp']);
+
+    Route::post('/auth/resend-otp', [AuthController::class, 'resendOtp'])
+        ->middleware(['ability:verify-account', 'throttle:5,1']); // يسمح بـ 5 طلبات كحد أقصى في الدقيقة لحماية السيرفر
+
+    Route::post('/auth/refresh', [AuthController::class, 'refresh'])
+        ->middleware('ability:issue-access-token');
+
+    Route::get('/user', function (Request $request) {
+        return $request->user();
     });
 
-    /**
-     */
-    Route::middleware('abilities:access-api')->group(function () {
+    Route::post('/auth/logout', [AuthController::class, 'logout']);
+
+    Route::middleware([EnsureAccountIsVerified::class])->group(function () {
         
-        Route::get('/user', function (Request $request) {
-            return $request->user();
+        Route::middleware([EnsureProfileIsCompleted::class])->group(function () {
+            Route::post('/provider/complete-profile', [ProviderAuthController::class, 'store']);
         });
-
-        // تسجيل الخروج (إتلاف التوكن الحالي)
-        Route::post('/logout', [AuthController::class, 'logout']);
-
-    
+        
     });
 });

@@ -15,7 +15,7 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->string('path');
             $table->string('alt_text')->nullable();
-            $table->ulidMorphs('imageable');
+            $table->ulidMorphs('mediable');
         });
     }
 

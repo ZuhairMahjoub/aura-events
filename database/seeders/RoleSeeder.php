@@ -13,11 +13,13 @@ class RoleSeeder extends Seeder
      */
     public function run(): void
     {
-        $webRoles=['admin','provider'];
+        $webRoles=['admin','provider','organizer'];
         foreach($webRoles as $webrole){
-            Role::firstOrCreate(['name'=>$webrole,'guard_name' => 'web']);
+            Role::create([
+                'name'=>$webrole,
+                'guard_name'=>'api'
+            ]);
         }
     
-            Role::firstOrCreate(['name'=>'organizer','guard_name' => 'api']);
 }
 }
