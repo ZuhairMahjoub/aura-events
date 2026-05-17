@@ -1,37 +1,46 @@
 <?php
-
 namespace App\Listeners;
 
 use App\Events\UserRegistered;
 use App\Services\OtpService;
-use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Contracts\Queue\ShouldQueue; // استيراد الـ Queue
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Support\Facades\Log;
 
-class SendOtpNotification implements ShouldQueue
+class SendOtpNotification implements ShouldQueue // إضافة التوجيه للـ Queue
 {
     use InteractsWithQueue;
-public $tries = 1;
-    protected OtpService $otpService;
 
-    /**
-     * حقن خدمة الـ OTP
-     */
+    protected $otpService;
+
     public function __construct(OtpService $otpService)
     {
         $this->otpService = $otpService;
     }
 
-    /**
-     */
+
     public function handle(UserRegistered $event): void
     {
-        if ($event->user->phone) {
+        $user = $event->user;
 
-            $phone = $event->user->phone;
+        if ($user->phone) {
+            try {
+                $phone =  $user->phone;
 
-            $code = $this->otpService->generateForPhone($phone);
+                $code = $this->otpService->generateForPhone($phone);
 
-            $this->otpService->sendViaWhatsapp($phone, $code);
+                // عند إرسال الـ OTP عبر الواتساب
+
+                $this->otpService->sendViaWhatsapp($phone, $code);
+
+                Log::info("OTP sent successfully to: {$phone}");
+
+            } catch (\Exception $e) {
+                // تسجيل الخطأ في حال فشل الإرسال لضمان عدم توقف النظام
+                Log::error("Failed to send OTP to {$user->phone}: " . $e->getMessage());
+                
+                // يمكنك هنا إعادة المحاولة (Retry) إذا أردت
+            }
         }
     }
 }

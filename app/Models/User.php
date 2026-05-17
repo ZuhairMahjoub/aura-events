@@ -2,115 +2,87 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Database\Factories\UserFactory;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
-
-
-use App\Models\ServiceProviderProfile;
+use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Auth\Passwords\CanResetPassword;
 use Illuminate\Contracts\Auth\CanResetPassword as AuthCanResetPassword;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
-use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable implements MustVerifyEmail, AuthCanResetPassword
 {
-    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, HasUlids, HasRoles, HasApiTokens, CanResetPassword;
-
+public $incrementing = false; // لتعطيل الزيادة التلقائية للـ ID
+public $keyType = 'string'; // لتحديد نوع الـ ID كـ string (UL
     /**
      * الحقول القابلة للتعبئة.
-     *
-     * @var list<string>
+     * تم تحديثها لتشمل account_type و is_profile_completed.
      */
     protected $fillable = [
         'first_name',
         'last_name',
         'email',
-        'phone_verified_at',
         'phone',
-        'city_id',
         'password',
+        'account_type',       // [customer, provider]
+        'status',             // [active, inactive, banned]
+        'is_profile_completed', //
         'settings_language',
-        'provider',
-        'provider_id',
         'settings_theme',
+        'provider',           // لدعم Social Login
+        'provider_id',        // لدعم Social Login
+        'phone_verified_at',
     ];
 
-    /**
-     * الحقول المخفية عند التحويل لـ JSON.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * تحويل البيانات (Casting).
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
             'phone_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_profile_completed' => 'boolean',
         ];
     }
 
-    /**
-     * تحديد الـ Guard الافتراضي لـ Spatie.
-     */
     protected $guard_name = 'api';
 
-    // --- العلاقات (Relationships) ---
+    // --- العلاقات المحدثة (Relationships) ---
 
     /**
-     * علاقة مستخدم بملف مقدم الخدمة.
+     * العلاقة مع موديل Provider الجديد بدلاً من ServiceProviderProfile القديم.
      */
-    public function serviceProviderProfile(): HasOne
+    public function provider(): HasOne
     {
-        return $this->hasOne(ServiceProviderProfile::class);
-    }
-    public function hasVerifiedPhone(): bool
-{
-    return ! is_null($this->phone_verified_at);
-}
-
-    /**
-     * 
-     */
-    public function city(): BelongsTo
-    {
-        return $this->belongsTo(City::class);
+        // تم استبدال ServiceProviderProfile بـ Provider بناءً على التعديل الأخير
+        return $this->hasOne(Provider::class);
     }
 
     /**
-     * 
+     * علاقة الصور المتعددة (Polymorphic).
+     * تم تحديث الاسم ليتوافق مع المايجريشن (mediable).
      */
     public function images(): MorphMany
     {
-        return $this->morphMany(Image::class, 'imageable');
+        return $this->morphMany(Image::class, 'mediable');
     }
 
-    /**
-     * 
-     */
-    public function addresses(): MorphMany
+    // --- وظائف مساعدة (Helpers) ---
+
+    public function hasVerifiedPhone(): bool
     {
-
-        return $this->morphMany(Address::class, 'addressable');
+        return ! is_null($this->phone_verified_at);
     }
+
     public function markPhoneAsVerified()
     {
         return $this->forceFill([
