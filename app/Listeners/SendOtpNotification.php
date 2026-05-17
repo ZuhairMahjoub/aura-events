@@ -22,7 +22,6 @@ public $tries = 1;
     }
 
     /**
-     * معالجة الحدث وإرسال الرمز
      */
     public function handle(UserRegistered $event): void
     {
