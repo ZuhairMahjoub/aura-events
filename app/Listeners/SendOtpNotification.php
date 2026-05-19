@@ -29,7 +29,6 @@ class SendOtpNotification implements ShouldQueue // إضافة التوجيه ل
 
                 $code = $this->otpService->generateForPhone($phone);
 
-                // عند إرسال الـ OTP عبر الواتساب
 
                 $this->otpService->sendViaWhatsapp($phone, $code);
 

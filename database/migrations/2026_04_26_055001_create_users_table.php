@@ -37,6 +37,7 @@ return new class extends Migration
         $table->string('provider_id')->nullable();
 
         $table->rememberToken();
+        $table->softDeletes();
         $table->timestamps();
     });
 

@@ -13,10 +13,11 @@ use Illuminate\Auth\Passwords\CanResetPassword;
 use Illuminate\Contracts\Auth\CanResetPassword as AuthCanResetPassword;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class User extends Authenticatable implements MustVerifyEmail, AuthCanResetPassword
 {
-    use HasFactory, Notifiable, HasUlids, HasRoles, HasApiTokens, CanResetPassword;
+    use HasFactory, Notifiable, HasUlids, HasRoles, HasApiTokens, CanResetPassword,SoftDeletes;
 public $incrementing = false; // لتعطيل الزيادة التلقائية للـ ID
 public $keyType = 'string'; // لتحديد نوع الـ ID كـ string (UL
     /**

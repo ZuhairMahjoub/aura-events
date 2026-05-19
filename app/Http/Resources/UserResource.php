@@ -2,10 +2,14 @@
 
 namespace App\Http\Resources;
 
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class UserResource extends JsonResource
 {
+    /**
+     * تحويل كائن المستخدم إلى مصفوفة بالبيانات المحددة
+     */
     public function toArray($request): array
     {
         return [
@@ -19,5 +23,21 @@ class UserResource extends JsonResource
             'email_verified'       => !is_null($this->email_verified_at),
             'phone_verified'       => !is_null($this->phone_verified_at),
         ];
+    }
+
+    /**
+     * أعلى معايير الـ Clean Code: بناء استجابة النجاح المركزية عند التسجيل
+     */
+    public static function customResponse($user, string $token)
+    {
+        return (new self($user))
+            ->additional([
+                'status'  => 'success',
+                'message' => 'تم إنشاء الحساب بنجاح. يرجى تفعيله.',
+                'data'    => [
+                    'requires_verification' => true,
+                    'verification_token'    => $token,
+                ]
+            ]);
     }
 }

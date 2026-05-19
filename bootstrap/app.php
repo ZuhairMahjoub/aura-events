@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\RedirectIfUnverified;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -18,9 +19,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'verified' => \App\Http\Middleware\EnsureEmailIsVerified::class,
-            // أضف السطرين أدناه هنا 👇
             'abilities' => \Laravel\Sanctum\Http\Middleware\CheckAbilities::class,
             'ability' => \Laravel\Sanctum\Http\Middleware\CheckForAnyAbility::class,
+            'check.account.exists' => \App\Http\Middleware\CheckIfAccountExists::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
