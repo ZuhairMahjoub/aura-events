@@ -5,35 +5,35 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Password;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Mail;
+use App\Models\User;
+use App\Mail\ResetPasswordOtpMail;
 
 class PasswordResetLinkController extends Controller
 {
     /**
-     * Handle an incoming password reset link request.
-     *
-     * @throws ValidationException
      */
     public function store(Request $request): JsonResponse
     {
         $request->validate([
-            'email' => ['required', 'email'],
+            'email' => ['required', 'email', 'exists:users,email'],
+        ], [
+            'email.exists' => 'هذا البريد الإلكتروني غير مسجل لدينا في النظام.'
         ]);
 
-        // We will send the password reset link to this user. Once we have attempted
-        // to send the link, we will examine the response then see the message we
-        // need to show to the user. Finally, we'll send out a proper response.
-        $status = Password::sendResetLink(
-            $request->only('email')
-        );
+        $email = $request->email;
 
-        if ($status != Password::RESET_LINK_SENT) {
-            throw ValidationException::withMessages([
-                'email' => [__($status)],
-            ]);
-        }
+        $otp = rand(100000, 999999);
 
-        return response()->json(['status' => __($status)]);
+        $cacheKey = 'password_reset_otp_' . $email;
+        Cache::put($cacheKey, $otp, now()->addMinutes(10));
+
+        Mail::to($email)->send(new ResetPasswordOtpMail($otp));
+
+        return response()->json([
+            'status' => true,
+            'message' => 'تم إرسال كود التحقق (OTP) بنجاح إلى بريدك الإلكتروني.'
+        ], 200);
     }
 }

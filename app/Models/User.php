@@ -2,14 +2,12 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Spatie\Permission\Traits\HasRoles;
-
+use Spatie\Permission\Traits\HasRoles; // مكتبة Spatie
 
 use App\Models\ServiceProviderProfile;
 use Illuminate\Auth\Passwords\CanResetPassword;
@@ -34,8 +32,9 @@ class User extends Authenticatable implements MustVerifyEmail, AuthCanResetPassw
         'first_name',
         'last_name',
         'email',
-        'phone_verified_at',
         'phone',
+        'phone_verified_at',
+        'email_verified_at', // تمت إضافته لكي يسمح بتحديثه عند التسجيل عبر جوجل
         'city_id',
         'password',
         'settings_language',
@@ -70,6 +69,8 @@ class User extends Authenticatable implements MustVerifyEmail, AuthCanResetPassw
 
     /**
      * تحديد الـ Guard الافتراضي لـ Spatie.
+     * إذا كنت تستخدم Sanctum كـ API بالكامل، فثبيته على 'api' ممتاز.
+     * نصيحة: إذا واجهتك مشكلة في التعرف على الأدوار مستقبلاً، يمكنك تحويلها إلى مصفوفة: ['web', 'api']
      */
     protected $guard_name = 'api';
 
@@ -82,13 +83,17 @@ class User extends Authenticatable implements MustVerifyEmail, AuthCanResetPassw
     {
         return $this->hasOne(ServiceProviderProfile::class);
     }
-    public function hasVerifiedPhone(): bool
-{
-    return ! is_null($this->phone_verified_at);
-}
 
     /**
-     * 
+     * التحقق مما إذا كان الهاتف مفعلاً
+     */
+    public function hasVerifiedPhone(): bool
+    {
+        return ! is_null($this->phone_verified_at);
+    }
+
+    /**
+     * علاقة المستخدم بالمدينة
      */
     public function city(): BelongsTo
     {
@@ -96,7 +101,7 @@ class User extends Authenticatable implements MustVerifyEmail, AuthCanResetPassw
     }
 
     /**
-     * 
+     * علاقة المورفولوجيا للصور
      */
     public function images(): MorphMany
     {
@@ -104,13 +109,16 @@ class User extends Authenticatable implements MustVerifyEmail, AuthCanResetPassw
     }
 
     /**
-     * 
+     * علاقة المورفولوجيا للعناوين
      */
     public function addresses(): MorphMany
     {
-
         return $this->morphMany(Address::class, 'addressable');
     }
+
+    /**
+     * توثيق رقم الهاتف وتحديث الوقت
+     */
     public function markPhoneAsVerified()
     {
         return $this->forceFill([

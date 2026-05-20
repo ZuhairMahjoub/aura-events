@@ -6,11 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 
-/*
-|--------------------------------------------------------------------------
-| API Routes - Aura Events Project (Professional Auth System)
-|--------------------------------------------------------------------------
-*/
+
 
 Route::prefix('auth')->group(function () {
     
@@ -50,4 +46,5 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
 });
 Route::post('/forgot-password', [PasswordResetLinkController::class, 'store']);
-Route::post('/reset-password', [NewPasswordController::class, 'store']);
+Route::post('/reset-password', [NewPasswordController::class, 'store'])->middleware('throttle:5,1');
+Route::post('/otp/resend', [AuthController::class, 'resendOtp']);

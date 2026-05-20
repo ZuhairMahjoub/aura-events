@@ -9,6 +9,8 @@ use Illuminate\Support\Str;
 class AuthService
 {
     /**
+     * * @param array $data
+     * @return User
      */
     public function createUser(array $data): User
     {
@@ -21,6 +23,9 @@ class AuthService
             'email'             => $data['email'] ?? null,
             'phone'             => $data['phone'] ?? null,
             
+            'email_verified_at' => $data['email_verified_at'] ?? null,
+            'phone_verified_at' => $data['phone_verified_at'] ?? null,
+            
             'password'          => Hash::needsRehash($data['password']) 
                                     ? Hash::make($data['password']) 
                                     : $data['password'],
@@ -31,6 +36,8 @@ class AuthService
     }
 
     /**
+     * * @param string $phone
+     * @return string
      */
     public function formatPhone(string $phone): string
     {
@@ -38,14 +45,18 @@ class AuthService
     }
     
     /**
+     * * @param array $data
+     * @return User|null
      */
-    public function login(array $data)
+    public function login(array $data): ?User
     {
         $identity = $data['identity'] ?? ($data['phone'] ?? null); 
         
-        if (!$identity) return null;
+        if (!$identity) {
+            return null;
+        }
 
-        $cleanIdentity = preg_replace('/\D/', '', $identity); 
+        $cleanIdentity = $this->formatPhone($identity); 
 
         $user = User::where('email', $identity)
                     ->orWhere('phone', $identity)
@@ -56,13 +67,6 @@ class AuthService
             return null; 
         }
 
-        $user->tokens()->delete();
-
-        $token = $user->createToken('auth_token', ['*'], now()->addMonth())->plainTextToken;
-
-        return [
-            'user'  => $user,
-            'token' => $token
-        ];
+        return $user;
     }
 }
