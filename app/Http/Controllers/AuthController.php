@@ -65,8 +65,91 @@ class AuthController extends Controller
         }
     }
 
+// public function store(Request $request)
+// {
+//     if ($request->has('identity')) {
+//         $identity = $request->input('identity');
+//         $isEmail = filter_var($identity, FILTER_VALIDATE_EMAIL);
+//         $cleanIdentity = !$isEmail ? $this->authService->formatPhone($identity) : $identity;
+
+//         $pendingUser = \App\Models\User::where(function($query) use ($cleanIdentity) {
+//                             $query->where('email', $cleanIdentity)
+//                                   ->orWhere('phone', $cleanIdentity);
+//                         })
+//                         ->whereNull('email_verified_at')
+//                         ->whereNull('phone_verified_at')
+//                         ->first();
+
+//         if ($pendingUser) {
+//             $cacheKey = 'otp_' . $cleanIdentity;
+//             $hasExpiredOtp = !\Illuminate\Support\Facades\Cache::has($cacheKey);
+//             $isOldAccount = $pendingUser->created_at->addMinutes(10)->isPast();
+
+//             if ($hasExpiredOtp && $isOldAccount) {
+//                 $pendingUser->roles()->detach();  
+//                 $pendingUser->delete();         
+//             }
+//         }
+//     }
+//     $validatedData = $request->validate([
+//         'first_name' => 'required|string|max:255',
+//         'last_name'  => 'required|string|max:255',
+//         'identity'   => 'required', 
+//         'password'   => 'required|string|min:8|confirmed',
+//         'role'       => 'nullable|string|in:client,provider,organizer', // الأدوار المسموح بها
+//     ]);
+
+//     $identity = $validatedData['identity'];
+//     $isEmail = filter_var($identity, FILTER_VALIDATE_EMAIL);
+//     $cleanIdentity = !$isEmail ? $this->authService->formatPhone($identity) : $identity;
+
+//     $userData = [
+//         'first_name' => $validatedData['first_name'],
+//         'last_name'  => $validatedData['last_name'],
+//         'password'   => $validatedData['password'],
+//         'email'      => $isEmail ? $cleanIdentity : null,
+//         'phone'      => !$isEmail ? $cleanIdentity : null,
+//     ];
+
+//     $roleName = $request->input('role', 'client'); 
+
+//     try {
+//         return \Illuminate\Support\Facades\DB::transaction(function () use ($userData, $isEmail, $roleName) {
+            
+//             $user = $this->authService->createUser($userData);
+
+//             $role = \App\Models\Role::where('name', $roleName)->where('guard_name', 'api')->first();
+            
+//             if ($role) {
+//                 $user->assignRole($role);
+//             } else {
+//                 $user->assignRole($roleName); 
+//             }
+
+//             event(new \App\Events\UserRegistered($user));
+
+//             return response()->json([
+//                 'status'  => 'success',
+//                 'message' => 'تم إنشاء الحساب بنجاح وإسناد الصلاحيات. يرجى تفعيل حسابك عبر الكود المرسل إلى ' . ($isEmail ? 'بريدك' : 'هاتفك'),
+//                 'data'    => [
+//                     'user' => $user->load('roles') 
+//                 ]
+//             ], 201);
+//         });
+
+//     } catch (\Exception $e) {
+//         \Illuminate\Support\Facades\Log::error("Registration Failed: " . $e->getMessage());
+
+//         return response()->json([
+//             'status'  => 'error',
+//             'message' => 'حدث خطأ أثناء إنشاء الحساب، يرجى المحاولة لاحقاً.',
+//             'debug'   => config('app.debug') ? $e->getMessage() : null 
+//         ], 500);
+//     }
+// }
 public function store(Request $request)
 {
+    // 1. منطق الفحص الذكي: تنظيف وقفل الحسابات المعلقة التي تجاوزت 10 دقائق دون تفعيل
     if ($request->has('identity')) {
         $identity = $request->input('identity');
         $isEmail = filter_var($identity, FILTER_VALIDATE_EMAIL);
@@ -91,12 +174,14 @@ public function store(Request $request)
             }
         }
     }
+
+    // 2. التحقق من البيانات المدخلة من الفرونت إند
     $validatedData = $request->validate([
         'first_name' => 'required|string|max:255',
         'last_name'  => 'required|string|max:255',
         'identity'   => 'required', 
         'password'   => 'required|string|min:8|confirmed',
-        'role'       => 'nullable|string|in:client,provider,organizer', // الأدوار المسموح بها
+        'role'       => 'nullable|string|in:client,provider,organizer', 
     ]);
 
     $identity = $validatedData['identity'];
@@ -116,21 +201,30 @@ public function store(Request $request)
     try {
         return \Illuminate\Support\Facades\DB::transaction(function () use ($userData, $isEmail, $roleName) {
             
+            // أ. إنشاء الحساب في قاعدة البيانات عبر الـ AuthService
             $user = $this->authService->createUser($userData);
 
+            // ب. إسناد الدور (Spatie Permissions)
             $role = \App\Models\Role::where('name', $roleName)->where('guard_name', 'api')->first();
-            
             if ($role) {
                 $user->assignRole($role);
             } else {
                 $user->assignRole($roleName); 
             }
 
+            // ج. تجهيز رسالة الرد بناءً على نوع الهوية
+            if ($isEmail) {
+                $message = 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر الرابط المرسل إلى بريدك الإلكتروني.';
+            } else {
+                $message = 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر كود الـ OTP المرسل إلى واتساب هاتفك.';
+            }
+
+            // د. إطلاق الحدث (الـ Listeners بالخلفية ستقوم بتوليد وإرسال الإيميل أو الواتساب تلقائياً)
             event(new \App\Events\UserRegistered($user));
 
             return response()->json([
                 'status'  => 'success',
-                'message' => 'تم إنشاء الحساب بنجاح وإسناد الصلاحيات. يرجى تفعيل حسابك عبر الكود المرسل إلى ' . ($isEmail ? 'بريدك' : 'هاتفك'),
+                'message' => $message,
                 'data'    => [
                     'user' => $user->load('roles') 
                 ]

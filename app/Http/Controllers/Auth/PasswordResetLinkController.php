@@ -12,18 +12,20 @@ use App\Mail\ResetPasswordOtpMail;
 
 class PasswordResetLinkController extends Controller
 {
-    /**
-     */
+    
     public function store(Request $request): JsonResponse
     {
         $request->validate([
-            'email' => ['required', 'email', 'exists:users,email'],
+            'email' => [
+                'required', 
+                'email', 
+                'exists:users,email,email_verified_at,NOT_NULL' 
+            ],
         ], [
-            'email.exists' => 'هذا البريد الإلكتروني غير مسجل لدينا في النظام.'
+            'email.exists' => 'هذا البريد الإلكتروني غير مسجل لدينا أو لم يتم تفعيله بعد.'
         ]);
 
         $email = $request->email;
-
         $otp = rand(100000, 999999);
 
         $cacheKey = 'password_reset_otp_' . $email;

@@ -45,6 +45,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     });
     
 });
-Route::post('/forgot-password', [PasswordResetLinkController::class, 'store']);
-Route::post('/reset-password', [NewPasswordController::class, 'store'])->middleware('throttle:5,1');
+Route::post('forgot-password', [PasswordResetLinkController::class, 'store']);
+
+Route::post('verify-otp', [NewPasswordController::class, 'verifyOtp']);
+
+Route::post('reset-password', [NewPasswordController::class, 'store']);
 Route::post('/otp/resend', [AuthController::class, 'resendOtp']);
