@@ -8,65 +8,54 @@ use Illuminate\Support\Str;
 
 class AuthService
 {
-    /**
-     * * @param array $data
-     * @return User
-     */
     public function createUser(array $data): User
     {
         return User::create([
             'id'                => (string) Str::ulid(), 
-            
             'first_name'        => $data['first_name'] ?? 'Google',
             'last_name'         => $data['last_name'] ?? 'User',
-            
             'email'             => $data['email'] ?? null,
             'phone'             => $data['phone'] ?? null,
-            
             'email_verified_at' => $data['email_verified_at'] ?? null,
             'phone_verified_at' => $data['phone_verified_at'] ?? null,
-            
             'password'          => Hash::needsRehash($data['password']) 
                                     ? Hash::make($data['password']) 
                                     : $data['password'],
-            
             'settings_language' => $data['settings_language'] ?? 'ar',
             'settings_theme'    => $data['settings_theme'] ?? 'light',
         ]);
     }
 
-    /**
-     * * @param string $phone
-     * @return string
-     */
     public function formatPhone(string $phone): string
     {
         return preg_replace('/\D/', '', $phone);
     }
     
     /**
-     * * @param array $data
-     * @return User|null
+     * منطق تسجيل الدخول الموحد والآمن
      */
-    public function login(array $data): ?User
+    public function login(array $data): array
     {
-        $identity = $data['identity'] ?? ($data['phone'] ?? null); 
-        
+        $identity = $data['identity'] ?? null; 
         if (!$identity) {
-            return null;
+            return ['status' => 'error', 'type' => 'invalid_credentials', 'code' => 401];
         }
 
-        $cleanIdentity = $this->formatPhone($identity); 
+        $cleanPhone = $this->formatPhone($identity); 
 
         $user = User::where('email', $identity)
-                    ->orWhere('phone', $identity)
-                    ->orWhere('phone', $cleanIdentity)
+                    ->orWhere('phone', $cleanPhone)
                     ->first();
 
         if (!$user || !Hash::check($data['password'], $user->password)) {
-            return null; 
+            return ['status' => 'error', 'type' => 'invalid_credentials', 'code' => 401];
         }
 
-        return $user;
+        // تحقق التفعيل الموحد: طالما أحدهما مفعّل يمر تسجيل الدخول
+        if (is_null($user->email_verified_at) && is_null($user->phone_verified_at)) {
+            return ['status' => 'error', 'type' => 'not_verified', 'code' => 403];
+        }
+
+        return ['status' => 'success', 'user' => $user];
     }
 }
