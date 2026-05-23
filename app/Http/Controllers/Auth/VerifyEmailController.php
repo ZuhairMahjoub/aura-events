@@ -1,34 +1,42 @@
 <?php
 
-namespace App\Http\Controllers\Auth;
+namespace App\Listeners;
 
-use App\Http\Controllers\Controller;
-use App\Models\User;
-use Illuminate\Auth\Events\Verified;
-use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
+use App\Events\UserRegistered;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\VerifyEmailOtpMail; // سنقوم بإنشائه في الخطوة التالية
 
-class VerifyEmailController extends Controller
+class SendEmailVerification implements ShouldQueue
 {
-    public function __invoke(Request $request, $id, $hash): JsonResponse
+    use InteractsWithQueue;
+
+    // public $tries = 3;      
+    // public $backoff = 10;
+
+    public function __construct()
     {
-        $user = User::findOrFail($id);
+        //
+    }
 
-        if (! hash_equals((string) $hash, sha1($user->getEmailForVerification()))) {
-            return response()->json(['message' => 'رابط التفعيل غير صالح.'], 403);
+    public function handle(UserRegistered $event): void
+    {
+        Log::info('--- بدأت عملية توليد وإرسال كود OTP للمستخدم: ' . $event->user->email);
+        
+        $user = $event->user;
+
+        if (!$user->email) {
+            return;
         }
 
-        if ($user->hasVerifiedEmail()) {
-            return response()->json(['message' => 'تم تفعيل الحساب مسبقاً.']);
-        }
+        $otp = rand(100000, 999999);
 
-        if ($user->markEmailAsVerified()) {
-            event(new Verified($user));
-        }
+        $cacheKey = 'otp_email_' . $user->email;
+        Cache::put($cacheKey, $otp, now()->addMinutes(10));
 
-        return response()->json([
-            'status' => 'success',
-            'message' => 'تم تفعيل البريد الإلكتروني بنجاح.'
-        ], 200);
+        Mail::to($user->email)->send(new VerifyEmailOtpMail($otp));
     }
 }

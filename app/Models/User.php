@@ -12,13 +12,13 @@ use Spatie\Permission\Traits\HasRoles; // مكتبة Spatie
 use App\Models\ServiceProviderProfile;
 use Illuminate\Auth\Passwords\CanResetPassword;
 use Illuminate\Contracts\Auth\CanResetPassword as AuthCanResetPassword;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Laravel\Sanctum\HasApiTokens;
 
-class User extends Authenticatable implements MustVerifyEmail, AuthCanResetPassword
+// 🔥 تم حذف implements MustVerifyEmail لقطع الرابط القديم نهائياً
+class User extends Authenticatable implements AuthCanResetPassword
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, HasUlids, HasRoles, HasApiTokens, CanResetPassword;
@@ -125,4 +125,24 @@ class User extends Authenticatable implements MustVerifyEmail, AuthCanResetPassw
             'phone_verified_at' => $this->freshTimestamp(),
         ])->save();
     }
+
+    /**
+     * تركناها احتياطاً لضمان عدم حدوث خطأ إذا استُدعيت من أي مكان آخر بالخلفية
+     */
+    public function sendEmailVerificationNotification()
+    {
+        // نتركها فارغة تماماً لتعطيل الرابط الافتراضي القديم
+    }public function notify($instance)
+{
+    // 🎯 جلب اسم الكلاس الكامل للإشعار يلي عم يحاول ينبعث
+    $notificationClass = get_class($instance);
+
+    // ❌ إذا كان اسم الكلاس بيحتوي على كلمة "Verify" أو "EmailVerification" امسكه واحظره فوراً!
+    if (str_contains($notificationClass, 'Verify') || str_contains($notificationClass, 'EmailVerification')) {
+        return; 
+    }
+
+    // باقي الإشعارات (مثل ResetPassword) بتمر عادي
+    parent::notify($instance);
+}
 }
