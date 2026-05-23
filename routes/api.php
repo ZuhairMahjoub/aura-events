@@ -5,7 +5,6 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
-// ✨ التعديل الصح للمسار مشان يروح الخط الأحمر:
 use App\Http\Controllers\Auth\EmailVerificationNotificationController; 
 
 Route::prefix('auth')->group(function () {
