@@ -79,25 +79,10 @@ class User extends Authenticatable implements AuthCanResetPassword
     /**
      * علاقة مستخدم بملف مقدم الخدمة.
      */
-    public function serviceProviderProfile(): HasOne
-    {
-        return $this->hasOne(ServiceProviderProfile::class);
-    }
-
-    /**
-     * التحقق مما إذا كان الهاتف مفعلاً
-     */
+   
     public function hasVerifiedPhone(): bool
     {
         return ! is_null($this->phone_verified_at);
-    }
-
-    /**
-     * علاقة المستخدم بالمدينة
-     */
-    public function city(): BelongsTo
-    {
-        return $this->belongsTo(City::class);
     }
 
     /**
@@ -111,11 +96,7 @@ class User extends Authenticatable implements AuthCanResetPassword
     /**
      * علاقة المورفولوجيا للعناوين
      */
-    public function addresses(): MorphMany
-    {
-        return $this->morphMany(Address::class, 'addressable');
-    }
-
+  
     /**
      * توثيق رقم الهاتف وتحديث الوقت
      */

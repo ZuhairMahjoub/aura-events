@@ -5,8 +5,14 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
-// ✨ التعديل الصح للمسار مشان يروح الخط الأحمر:
-use App\Http\Controllers\Auth\EmailVerificationNotificationController; 
+use App\Http\Controllers\Auth\EmailVerificationNotificationController;
+use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\DistrictController;
+use App\Http\Controllers\ProviderAuthController;
+use App\Http\Middleware\EnsureEmailIsVerified;
+use App\Http\Middleware\EnsureAccountIsVerified;
+
+
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'store']); 
@@ -35,3 +41,15 @@ Route::post('reset-password', [NewPasswordController::class, 'store']);
 
 Route::post('/otp/resend', [AuthController::class, 'resendOtp']);
 Route::post('/auth/verify-email-otp', [EmailVerificationNotificationController::class, 'verifyOtp']);
+
+Route::get('/categories', [CategoryController::class, 'index']);
+    Route::get('/districts', [DistrictController::class, 'index']);
+
+    
+// ✅ الترتيب الصحيح والسليم
+Route::middleware(['auth:sanctum', EnsureAccountIsVerified::class])->group(function () {
+    
+    Route::post('/provider/complete-profile', [ProviderAuthController::class, 'store']);
+    
+    // باقي الراوتات المحمية والمشترط تفعيلها...
+});

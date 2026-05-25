@@ -357,7 +357,7 @@ class AuthController extends Controller
         $user->phone_verified_at = now(); 
         $user->save();
 
-        $accessToken = $user->createToken('access_token', ['access-api'], now()->addMinutes(15))->plainTextToken;
+        $accessToken = $user->createToken('access_token', ['access-api'])->plainTextToken;
         $refreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
 
         $user->load('roles');
