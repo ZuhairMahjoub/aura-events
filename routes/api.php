@@ -11,7 +11,7 @@ use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\ProviderAuthController;
 use App\Http\Middleware\EnsureEmailIsVerified;
 use App\Http\Middleware\EnsureAccountIsVerified;
-
+use App\Http\Controllers\ListingController;
 
 
 Route::prefix('auth')->group(function () {
@@ -46,10 +46,22 @@ Route::get('/categories', [CategoryController::class, 'index']);
     Route::get('/districts', [DistrictController::class, 'index']);
 
     
-// ✅ الترتيب الصحيح والسليم
 Route::middleware(['auth:sanctum', EnsureAccountIsVerified::class])->group(function () {
     
     Route::post('/provider/complete-profile', [ProviderAuthController::class, 'store']);
     
-    // باقي الراوتات المحمية والمشترط تفعيلها...
+});
+Route::middleware(['auth:sanctum'])->group(function () {
+    
+    Route::prefix('listings')->group(function () {
+        Route::get('/', [ListingController::class, 'index'])->middleware('permission:view listings');
+        Route::get('/{listing}', [ListingController::class, 'show'])->middleware('permission:view listings');
+
+        Route::middleware(['approved_provider'])->group(function () {
+            Route::post('/', [ListingController::class, 'store'])->middleware('permission:create listings');
+            Route::put('/{listing}', [ListingController::class, 'update'])->middleware('permission:update listings');
+            Route::delete('/{listing}', [ListingController::class, 'destroy'])->middleware('permission:delete listings');
+        });
+    });
+
 });

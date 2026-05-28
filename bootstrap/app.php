@@ -18,8 +18,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'verified' => \App\Http\Middleware\EnsureEmailIsVerified::class,
                 'account_verified' => \App\Http\Middleware\EnsureAccountIsVerified::class,  
-            // أضف السطرين أدناه هنا 👇
-            'abilities' => \Laravel\Sanctum\Http\Middleware\CheckAbilities::class,
+'role'               => \Spatie\Permission\Middleware\RoleMiddleware::class,
+            'permission'         => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class, 
+            'approved_provider' => \App\Http\Middleware\EnsureUserIsApprovedProvider::class,           'abilities' => \Laravel\Sanctum\Http\Middleware\CheckAbilities::class,
             'ability' => \Laravel\Sanctum\Http\Middleware\CheckForAnyAbility::class,
         ]);
     })
