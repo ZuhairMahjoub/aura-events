@@ -67,6 +67,11 @@ class User extends Authenticatable implements AuthCanResetPassword
         ];
     }
 
+    public function providerProfile()
+{
+    // ربط مستخدم واحد بمزود خدمة واحد باستخدام الـ ULIDs
+    return $this->hasOne(Provider::class, 'user_id', 'id');
+}
     /**
      * تحديد الـ Guard الافتراضي لـ Spatie.
      * إذا كنت تستخدم Sanctum كـ API بالكامل، فثبيته على 'api' ممتاز.
