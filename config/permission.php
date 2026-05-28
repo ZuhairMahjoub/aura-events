@@ -18,9 +18,12 @@ return [
          */
 
      // تأكد أن المسار يشير لمجلد app/Models وليس Spatie
-        'permission' => App\Models\Permission::class,
+       'permission' => App\Models\Permission::class,
 
-        'role' => App\Models\Role::class,
+    /*
+     * الموديل المخصص للأدوار
+     */
+    'role' => App\Models\Role::class,
         /*
          * When using the "HasRoles" trait from this package, we need to know which
          * Eloquent model should be used to retrieve your roles. Of course, it

@@ -2,19 +2,39 @@
 
 namespace App\Http\Controllers;
 
+
+use App\Events\UserRegistered;
+
 use Google\Client as GoogleClient;
 use Illuminate\Http\Request;
 use Laravel\Socialite\Facades\Socialite; 
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Auth;
 use Exception;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str; 
 use Illuminate\Support\Facades\Hash;
+
 use Firebase\JWT\JWT; 
 
 class AuthController extends Controller
 {
+
+use App\Services\OtpService;
+use App\Services\AuthService;
+
+class AuthController extends Controller
+{
+    protected $authService;
+    protected $otpService;
+
+    public function __construct(AuthService $authService, OtpService $otpService) 
+    {
+        $this->authService = $authService;
+        $this->otpService = $otpService;
+    }
+
     public function redirectToGoogle()
     {
         return Socialite::driver('google')->stateless()->redirect();

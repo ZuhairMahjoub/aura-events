@@ -2,25 +2,26 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Spatie\Permission\Traits\HasRoles;
-
+use Spatie\Permission\Traits\HasRoles; // مكتبة Spatie
 
 use App\Models\ServiceProviderProfile;
+use Illuminate\Auth\Passwords\CanResetPassword;
+use Illuminate\Contracts\Auth\CanResetPassword as AuthCanResetPassword;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Laravel\Sanctum\HasApiTokens;
 
-class User extends Authenticatable
+// 🔥 تم حذف implements MustVerifyEmail لقطع الرابط القديم نهائياً
+class User extends Authenticatable implements AuthCanResetPassword
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, HasUlids, HasRoles,HasApiTokens;
+    use HasFactory, Notifiable, HasUlids, HasRoles, HasApiTokens, CanResetPassword;
 
     /**
      * الحقول القابلة للتعبئة.
@@ -32,6 +33,8 @@ class User extends Authenticatable
         'last_name',
         'email',
         'phone',
+        'phone_verified_at',
+        'email_verified_at', // تمت إضافته لكي يسمح بتحديثه عند التسجيل عبر جوجل
         'city_id',
         'password',
         'settings_language',
@@ -59,35 +62,36 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'phone_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
 
+    public function providerProfile()
+{
+    // ربط مستخدم واحد بمزود خدمة واحد باستخدام الـ ULIDs
+    return $this->hasOne(Provider::class, 'user_id', 'id');
+}
     /**
      * تحديد الـ Guard الافتراضي لـ Spatie.
+     * إذا كنت تستخدم Sanctum كـ API بالكامل، فثبيته على 'api' ممتاز.
+     * نصيحة: إذا واجهتك مشكلة في التعرف على الأدوار مستقبلاً، يمكنك تحويلها إلى مصفوفة: ['web', 'api']
      */
-    protected $guard_name = 'web';
+    protected $guard_name = 'api';
 
     // --- العلاقات (Relationships) ---
 
     /**
      * علاقة مستخدم بملف مقدم الخدمة.
      */
-    public function serviceProviderProfile(): HasOne
+   
+    public function hasVerifiedPhone(): bool
     {
-        return $this->hasOne(ServiceProviderProfile::class);
+        return ! is_null($this->phone_verified_at);
     }
 
     /**
-     * 
-     */
-    public function city(): BelongsTo
-    {
-        return $this->belongsTo(City::class);
-    }
-
-    /**
-     * 
+     * علاقة المورفولوجيا للصور
      */
     public function images(): MorphMany
     {
@@ -95,11 +99,36 @@ class User extends Authenticatable
     }
 
     /**
-     * 
+     * علاقة المورفولوجيا للعناوين
      */
-    public function addresses(): MorphMany
+  
+    /**
+     * توثيق رقم الهاتف وتحديث الوقت
+     */
+    public function markPhoneAsVerified()
     {
-        
-        return $this->morphMany(Address::class, 'addressable');
+        return $this->forceFill([
+            'phone_verified_at' => $this->freshTimestamp(),
+        ])->save();
     }
+
+    /**
+     * تركناها احتياطاً لضمان عدم حدوث خطأ إذا استُدعيت من أي مكان آخر بالخلفية
+     */
+    public function sendEmailVerificationNotification()
+    {
+        // نتركها فارغة تماماً لتعطيل الرابط الافتراضي القديم
+    }public function notify($instance)
+{
+    // 🎯 جلب اسم الكلاس الكامل للإشعار يلي عم يحاول ينبعث
+    $notificationClass = get_class($instance);
+
+    // ❌ إذا كان اسم الكلاس بيحتوي على كلمة "Verify" أو "EmailVerification" امسكه واحظره فوراً!
+    if (str_contains($notificationClass, 'Verify') || str_contains($notificationClass, 'EmailVerification')) {
+        return; 
+    }
+
+    // باقي الإشعارات (مثل ResetPassword) بتمر عادي
+    parent::notify($instance);
+}
 }
