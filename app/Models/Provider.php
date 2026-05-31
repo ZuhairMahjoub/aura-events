@@ -20,9 +20,11 @@ class Provider extends Model
         'provider_type',
         'rating',
         'is_verified',
-        'district_id',      // 👈 ضيف هاد الحقل فوراً
-        'address_details',   // 👈
-        'is_active'
+        'district_id',        
+        'address_details',    
+        'is_active',
+        'moderation_status',        
+        'rejection_reason'
     ];
 
     public function user(): BelongsTo

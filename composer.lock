@@ -4,15 +4,9 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-<<<<<<< HEAD
-<<<<<<< HEAD
-    "content-hash": "76b2d93e349628cc4e2cb28b71ae2e9d",
-=======
-    "content-hash": "a6b693d7b53641b392366607945891c7",
->>>>>>> 3466432 (fix: resolve Google Socialite authentication callback issues)
-=======
-    "content-hash": "a4026dfa2e4b1c915f4a8e381b4ea735",
->>>>>>> 5457de136ef89eb402f1d34f77ab8ad7521b26ef
+
+
+
     "packages": [
         {
             "name": "brick/math",
@@ -3296,8 +3290,8 @@
             "time": "2026-04-27T07:02:15+00:00"
         },
         {
-<<<<<<< HEAD
-=======
+
+
             "name": "predis/predis",
             "version": "v3.4.2",
             "source": {
@@ -3361,7 +3355,6 @@
             "time": "2026-03-09T20:33:04+00:00"
         },
         {
->>>>>>> 5457de136ef89eb402f1d34f77ab8ad7521b26ef
             "name": "psr/cache",
             "version": "3.0.0",
             "source": {

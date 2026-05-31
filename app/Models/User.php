@@ -34,7 +34,7 @@ class User extends Authenticatable implements AuthCanResetPassword
         'email',
         'phone',
         'phone_verified_at',
-        'email_verified_at', // تمت إضافته لكي يسمح بتحديثه عند التسجيل عبر جوجل
+        'email_verified_at',
         'city_id',
         'password',
         'settings_language',
@@ -103,7 +103,6 @@ class User extends Authenticatable implements AuthCanResetPassword
      */
   
     /**
-     * توثيق رقم الهاتف وتحديث الوقت
      */
     public function markPhoneAsVerified()
     {
@@ -113,22 +112,17 @@ class User extends Authenticatable implements AuthCanResetPassword
     }
 
     /**
-     * تركناها احتياطاً لضمان عدم حدوث خطأ إذا استُدعيت من أي مكان آخر بالخلفية
      */
     public function sendEmailVerificationNotification()
     {
-        // نتركها فارغة تماماً لتعطيل الرابط الافتراضي القديم
     }public function notify($instance)
 {
-    // 🎯 جلب اسم الكلاس الكامل للإشعار يلي عم يحاول ينبعث
     $notificationClass = get_class($instance);
 
-    // ❌ إذا كان اسم الكلاس بيحتوي على كلمة "Verify" أو "EmailVerification" امسكه واحظره فوراً!
     if (str_contains($notificationClass, 'Verify') || str_contains($notificationClass, 'EmailVerification')) {
         return; 
     }
 
-    // باقي الإشعارات (مثل ResetPassword) بتمر عادي
     parent::notify($instance);
 }
 }

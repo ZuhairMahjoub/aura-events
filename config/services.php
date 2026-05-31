@@ -39,17 +39,13 @@ return [
         'client_secret'=>env('GOOGLE_CLIENT_SECRET'),
         'redirect'=>env('GOOGLE_REDIRECT_URI'),
         'android'=>env('ANDROID_GOOGLE_CLIENT_ID')
-<<<<<<< HEAD
-    ]
-=======
     ],
+    
     'ultramsg' => [
     'instance_id' => env('ULTRAMSG_INSTANCE_ID'),
     'token'       => env('ULTRAMSG_TOKEN'),
     'base_url'    => env('ULTRAMSG_BASE_URL', 'https://api.ultramsg.com'),
 ],
-    
->>>>>>> 5457de136ef89eb402f1d34f77ab8ad7521b26ef
     
 
 ];

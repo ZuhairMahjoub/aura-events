@@ -97,7 +97,7 @@ class NewPasswordController extends Controller
 
         Cache::forget($cacheKey);
 
-        $user->tokens()->delete();
+        $user->tokens()->where('expires_at', '<', now())->delete();
 
         return response()->json([
             'status' => true,

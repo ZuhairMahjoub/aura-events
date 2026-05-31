@@ -10,6 +10,7 @@ use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Http\Request;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Route;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -26,6 +27,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('verify-otp', function (Request $request) {
             return Limit::perMinute(5)->by($request->input('phone') ?: $request->ip());
         });
+        Route::aliasMiddleware('is_admin', \App\Http\Middleware\EnsureUserIsAdmin::class);
     }
 
     public function shouldDiscoverEvents(): bool

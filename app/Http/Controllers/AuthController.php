@@ -2,9 +2,7 @@
 
 namespace App\Http\Controllers;
 
-
 use App\Events\UserRegistered;
-
 use Google\Client as GoogleClient;
 use Illuminate\Http\Request;
 use Laravel\Socialite\Facades\Socialite; 
@@ -15,12 +13,7 @@ use Exception;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str; 
 use Illuminate\Support\Facades\Hash;
-
 use Firebase\JWT\JWT; 
-
-class AuthController extends Controller
-{
-
 use App\Services\OtpService;
 use App\Services\AuthService;
 
@@ -73,48 +66,312 @@ class AuthController extends Controller
         }
     }
 
-    public function handleGoogleMobileLogin(Request $request)
+    public function store(\Illuminate\Http\Request $request)
     {
-        $idToken = $request->input('access_token');
+        $validatedData = $request->validate([
+            'first_name' => 'required|string|max:255',
+            'last_name'  => 'required|string|max:255',
+            'identity'   => 'required', 
+            'password'   => 'required|string|min:8|confirmed',
+            'role'       => 'nullable|string|in:client,provider,organizer', 
+        ]);
 
-        if (!$idToken) {
-            return response()->json(['error' => 'Token not provided'], 400);
-        }
+        $identity = $validatedData['identity'];
+        $isEmail = filter_var($identity, FILTER_VALIDATE_EMAIL);
+        $cleanIdentity = !$isEmail ? $this->authService->formatPhone($identity) : $identity;
 
-        try {
-            if (class_exists('\Firebase\JWT\JWT')) {
-                \Firebase\JWT\JWT::$leeway = 60; 
+        $pendingUser = \App\Models\User::where(function($query) use ($cleanIdentity) {
+                            $query->where('email', $cleanIdentity)
+                                  ->orWhere('phone', $cleanIdentity);
+                        })
+                        ->whereNull('email_verified_at')
+                        ->whereNull('phone_verified_at')
+                        ->first();
+
+        if ($pendingUser) {
+            $cacheKey = $isEmail ? 'otp_email_' . $cleanIdentity : 'otp_phone_' . $cleanIdentity; 
+            $hasExpiredOtp = !\Illuminate\Support\Facades\Cache::has($cacheKey);
+
+            if (!$hasExpiredOtp) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'هذا الحساب مسجل بالفعل ولكنه غير مفعل، يرجى تفعيله بكود الـ OTP المرسل إليك.'
+                ], 400);
             }
 
-            $client = new GoogleClient(['client_id' => config('services.google.android')]); 
-            $client->setHttpClient(new \GuzzleHttp\Client(['verify' => false]));
-            
+            $pendingUser->roles()->detach();  
+            $pendingUser->delete();         
+        }
+
+        $userData = [
+            'first_name' => $validatedData['first_name'],
+            'last_name'  => $validatedData['last_name'],
+            'password'   => $validatedData['password'],
+            'email'      => $isEmail ? $cleanIdentity : null,
+            'phone'      => !$isEmail ? $cleanIdentity : null,
+        ];
+
+        $roleName = $request->input('role', 'client'); 
+
+        try {
+            $user = \Illuminate\Support\Facades\DB::transaction(function () use ($userData, $roleName) {
+                
+                $user = \App\Models\User::withoutEvents(function () use ($userData) {
+                    return $this->authService->createUser($userData);
+                });
+
+                $user->assignRole($roleName); 
+                return $user;
+            });
+
+            $message = $isEmail 
+                ? 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر كود الـ OTP المرسل إلى بريدك الإلكتروني.'
+                : 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر كود الـ OTP المرسل إلى واتساب هاتفك.';
+
+            event(new \App\Events\UserRegistered($user));
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => $message,
+                'data'    => [
+                    'user' => $user->load('roles') 
+                ]
+            ], 201);
+
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("Registration Failed: " . $e->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'حدث خطأ أثناء إنشاء الحساب، يرجى المحاولة لاحقاً.',
+                'debug'   => config('app.debug') ? $e->getMessage() : null 
+            ], 500);
+        }
+    }
+
+    public function login(Request $request)
+    {
+        $credentials = $request->validate([
+            'identity' => 'required', 
+            'password' => 'required',
+        ]);
+
+        $result = $this->authService->login($credentials);
+
+        if ($result['status'] === 'error') {
+            if ($result['type'] === 'not_verified') {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'عذراً، يجب تفعيل الحساب أولاً عبر الرابط المرسل لبريدك أو كود الـ OTP.',
+                    'is_verified' => false      
+                ], 403);
+            }
+
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'بيانات الاعتماد غير صحيحة'
+            ], 401);
+        }
+
+        $user = $result['user'];
+        $user->tokens()->where('expires_at', '<', now())->delete();
+        $accessToken = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;
+        $refreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
+
+        $user->load('roles');
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'تم تسجيل الدخول بنجاح',
+            'data'    => [
+                'user'          => $user,
+                'access_token'  => $accessToken,
+                'refresh_token' => $refreshToken,
+                'expires_in'    => 60 * 60, 
+            ]
+        ], 200);
+    }
+
+    public function handleGoogleMobileLogin(Request $request)
+    {
+        $idToken = $request->input('id_token');
+
+        if (!$idToken) {
+            return response()->json(['error' => 'Token is required'], 400);
+        }
+
+        $mobileClientId = "45320069047-hsglkfoe70gvltgroni6e5ggert8v72m.apps.googleusercontent.com";
+        $client = new \Google\Client(['client_id' => $mobileClientId]);
+        $client->setHttpClient(new \GuzzleHttp\Client(['verify' => false]));
+
+        try {
             $payload = $client->verifyIdToken($idToken);
 
             if ($payload) {
-                $user = User::updateOrCreate(
-                    ['email' => $payload['email']],
-                    [
-                        'first_name' => $payload['given_name'] ?? 'Google',
-                        'last_name'  => $payload['family_name'] ?? 'User',
-                        'password'   => Hash::make(Str::random(16)),
-                        'email_verified_at' => now(), 
-                    ]
-                );
+                $user = User::where('email', $payload['email'])->first();
 
-                $token = $user->createToken('auth_token')->plainTextToken;
+                if (!$user) {
+                    $fullName = $payload['name'] ?? 'Google User';
+                    $nameParts = explode(' ', $fullName, 2);
+                    
+                    $userData = [
+                        'first_name' => $nameParts[0],
+                        'last_name'  => $nameParts[1] ?? ' ',
+                        'email'      => $payload['email'],
+                        'password'   => \Illuminate\Support\Str::random(24),
+                        'phone'      => null,
+                        'role'       => 'organizer',
+                        'email_verified_at' => now(), 
+                    ];
+
+                    $user = $this->authService->createUser($userData);
+                    $user->assignRole('organizer');
+                }
+
+                $token = $user->createToken('google_token')->plainTextToken;
+                $user->load('roles');
 
                 return response()->json([
-                    'status' => 'success',
+                    'status'  => 'success',
+                    'user'    => $user,
                     'access_token' => $token,
-                    'user' => $user
+                ], 200);
+
+            } else {
+                return response()->json(['error' => 'Invalid ID Token'], 401);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'error'   => 'Authentication failed',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+       
+    public function verifyOtp(Request $request)
+    {
+        $validated = $request->validate([
+            'phone' => 'required|string',
+            'code'  => 'required|string|min:6',
+        ]);
+
+        $isValid = $this->otpService->verifyOtp($validated['phone'], $validated['code']);
+
+        if (!$isValid) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'كود التحقق غير صحيح أو انتهت صلاحيته'
+            ], 422);
+        }
+
+        $formattedPhone = $this->otpService->formatPhone($validated['phone']);
+        $user = User::where('phone', $formattedPhone)->first();
+        
+        if (!$user) {
+            return response()->json(['status' => 'error', 'message' => 'المستخدم غير موجود'], 404);
+        }
+
+        $user->phone_verified_at = now(); 
+        $user->save();
+
+        $accessToken = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;
+        $refreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
+
+        $user->load('roles');
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'تم التحقق بنجاح',
+            'data'    => [
+                'user'          => $user,
+                'access_token'  => $accessToken,
+                'refresh_token' => $refreshToken,
+                'expires_in'    => 60 * 60,
+            ]
+        ], 200);
+    }
+
+    public function refresh(Request $request)
+    {
+        $user = $request->user();
+        $currentToken = $user->currentAccessToken();
+
+        if (!$currentToken || !$currentToken->can('issue-access-token')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'غير مصرح بإجراء هذه العملية باستخدام هذا مفتاح.'
+            ], 403);
+        }
+
+        $currentToken->delete();
+
+        $newAccessToken = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;  
+        $newRefreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'access_token'  => $newAccessToken,
+                'refresh_token' => $newRefreshToken,
+                'expires_in'    => 60 * 60,
+            ]
+        ]);
+    }
+
+    public function logout(Request $request)
+    {
+       $request->user()->currentAccessToken()->delete();
+        return response()->json([
+            'status' => 'success',
+            'message' => 'تم تسجيل الخروج بنجاح وإبطال جميع المفاتيح'
+        ], 200);
+    }
+
+    public function resendOtp(Request $request)
+    {
+        $validatedData = $request->validate([
+            'identity' => 'required|string', 
+        ]);
+
+        $identity = $validatedData['identity'];
+        $cleanIdentity = $this->otpService->formatPhone($identity);
+
+        $user = \App\Models\User::where('phone', $cleanIdentity)
+                    ->whereNull('email_verified_at')
+                    ->whereNull('phone_verified_at')
+                    ->first();
+
+        if (!$user) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'عذراً، هذا الرقم غير موجود أو تم تفعيل الحساب مسبقاً.'
+            ], 442);
+        }
+
+        try {
+            $newCode = $this->otpService->generateForPhone($cleanIdentity);
+            $isSent = $this->otpService->sendViaWhatsapp($cleanIdentity, $newCode);
+
+            if ($isSent) {
+                return response()->json([
+                    'status'  => 'success',
+                    'message' => 'تم إعادة إرسال كود التحقق إلى الواتس آب بنجاح، صلاحية الكود 10 دقائق.',
                 ], 200);
             }
 
-            return response()->json(['error' => 'Invalid Token'], 401);
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'فشل إرسال رسالة الواتس آب، يرجى المحاولة لاحقاً.'
+            ], 500);
 
-        } catch (Exception $e) {
-            return response()->json(['error' => 'Server Error: ' . $e->getMessage()], 500);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("Resend OTP Failed: " . $e->getMessage());
+
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'حدث خطأ غير متوقع أثناء إعادة إرسال الكود.',
+                'debug'   => config('app.debug') ? $e->getMessage() : null
+            ], 500);
         }
     }
 }
