@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminListingController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use Illuminate\Http\Request;
@@ -12,6 +13,7 @@ use App\Http\Controllers\ProviderAuthController;
 use App\Http\Middleware\EnsureEmailIsVerified;
 use App\Http\Middleware\EnsureAccountIsVerified;
 use App\Http\Controllers\ListingController;
+use App\Http\Controllers\AdminProviderController; 
 
 
 Route::prefix('auth')->group(function () {
@@ -43,14 +45,13 @@ Route::post('/otp/resend', [AuthController::class, 'resendOtp']);
 Route::post('/auth/verify-email-otp', [EmailVerificationNotificationController::class, 'verifyOtp']);
 
 Route::get('/categories', [CategoryController::class, 'index']);
-    Route::get('/districts', [DistrictController::class, 'index']);
+Route::get('/districts', [DistrictController::class, 'index']);
 
     
 Route::middleware(['auth:sanctum', EnsureAccountIsVerified::class])->group(function () {
-    
     Route::post('/provider/complete-profile', [ProviderAuthController::class, 'store']);
-    
 });
+
 Route::middleware(['auth:sanctum'])->group(function () {
     
     Route::prefix('listings')->group(function () {
@@ -62,6 +63,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::put('/{listing}', [ListingController::class, 'update'])->middleware('permission:update listings');
             Route::delete('/{listing}', [ListingController::class, 'destroy'])->middleware('permission:delete listings');
         });
-    });
+    }); 
+}); 
+Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function () {
+    
+    Route::put('/providers/{id}/approve', [AdminProviderController::class, 'approve']);
+    Route::put('/providers/{id}/reject', [AdminProviderController::class, 'reject']);
+    Route::put('/listings/{id}/approve', [AdminListingController::class, 'approve']);
+    Route::put('/listings/{id}/reject', [AdminListingController::class, 'reject']);
 
 });

@@ -4,7 +4,9 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "a4026dfa2e4b1c915f4a8e381b4ea735",
+
+
+
     "packages": [
         {
             "name": "brick/math",
@@ -3288,6 +3290,8 @@
             "time": "2026-04-27T07:02:15+00:00"
         },
         {
+
+
             "name": "predis/predis",
             "version": "v3.4.2",
             "source": {

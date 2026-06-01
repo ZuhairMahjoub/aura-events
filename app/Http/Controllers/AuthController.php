@@ -13,6 +13,7 @@ use Exception;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str; 
 use Illuminate\Support\Facades\Hash;
+use Firebase\JWT\JWT; 
 use App\Services\OtpService;
 use App\Services\AuthService;
 
@@ -65,169 +66,88 @@ class AuthController extends Controller
         }
     }
 
-    // public function store(Request $request)
-    // {
-    //     if ($request->has('identity')) {
-    //         $identity = $request->input('identity');
-    //         $isEmail = filter_var($identity, FILTER_VALIDATE_EMAIL);
-    //         $cleanIdentity = !$isEmail ? $this->authService->formatPhone($identity) : $identity;
+    public function store(\Illuminate\Http\Request $request)
+    {
+        $validatedData = $request->validate([
+            'first_name' => 'required|string|max:255',
+            'last_name'  => 'required|string|max:255',
+            'identity'   => 'required', 
+            'password'   => 'required|string|min:8|confirmed',
+            'role'       => 'nullable|string|in:client,provider,organizer', 
+        ]);
 
-    //         $pendingUser = \App\Models\User::where(function($query) use ($cleanIdentity) {
-    //                             $query->where('email', $cleanIdentity)
-    //                                   ->orWhere('phone', $cleanIdentity);
-    //                         })
-    //                         ->whereNull('email_verified_at')
-    //                         ->whereNull('phone_verified_at')
-    //                         ->first();
+        $identity = $validatedData['identity'];
+        $isEmail = filter_var($identity, FILTER_VALIDATE_EMAIL);
+        $cleanIdentity = !$isEmail ? $this->authService->formatPhone($identity) : $identity;
 
-    //         if ($pendingUser) {
-    //             $cacheKey = 'otp_' . $cleanIdentity;
-    //             $hasExpiredOtp = !\Illuminate\Support\Facades\Cache::has($cacheKey);
-    //             $isOldAccount = $pendingUser->created_at->addMinutes(10)->isPast();
+        $pendingUser = \App\Models\User::where(function($query) use ($cleanIdentity) {
+                            $query->where('email', $cleanIdentity)
+                                  ->orWhere('phone', $cleanIdentity);
+                        })
+                        ->whereNull('email_verified_at')
+                        ->whereNull('phone_verified_at')
+                        ->first();
 
-    //             if ($hasExpiredOtp && $isOldAccount) {
-    //                 $pendingUser->roles()->detach();  
-    //                 $pendingUser->delete();         
-    //             }
-    //         }
-    //     }
+        if ($pendingUser) {
+            $cacheKey = $isEmail ? 'otp_email_' . $cleanIdentity : 'otp_phone_' . $cleanIdentity; 
+            $hasExpiredOtp = !\Illuminate\Support\Facades\Cache::has($cacheKey);
 
-    //     $validatedData = $request->validate([
-    //         'first_name' => 'required|string|max:255',
-    //         'last_name'  => 'required|string|max:255',
-    //         'identity'   => 'required', 
-    //         'password'   => 'required|string|min:8|confirmed',
-    //         'role'       => 'nullable|string|in:client,provider,organizer', 
-    //     ]);
+            if (!$hasExpiredOtp) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'هذا الحساب مسجل بالفعل ولكنه غير مفعل، يرجى تفعيله بكود الـ OTP المرسل إليك.'
+                ], 400);
+            }
 
-    //     $identity = $validatedData['identity'];
-    //     $isEmail = filter_var($identity, FILTER_VALIDATE_EMAIL);
-    //     $cleanIdentity = !$isEmail ? $this->authService->formatPhone($identity) : $identity;
-
-    //     $userData = [
-    //         'first_name' => $validatedData['first_name'],
-    //         'last_name'  => $validatedData['last_name'],
-    //         'password'   => $validatedData['password'],
-    //         'email'      => $isEmail ? $cleanIdentity : null,
-    //         'phone'      => !$isEmail ? $cleanIdentity : null,
-    //     ];
-
-    //     $roleName = $request->input('role', 'client'); 
-
-    //     try {
-    //         return \Illuminate\Support\Facades\DB::transaction(function () use ($userData, $isEmail, $roleName) {
-                
-    //             $user = $this->authService->createUser($userData);
-
-    //             // هنا يتم إسناد الـ Role مباشرة وبشكل آمن متوافق مع Guards الحزمة الافتراضية
-    //             $user->assignRole($roleName); 
-
-    //             $message = $isEmail 
-    //                 ? 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر الرابط المرسل إلى بريدك الإلكتروني.'
-    //                 : 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر كود الـ OTP المرسل إلى واتساب هاتفك.';
-
-    //             event(new \App\Events\UserRegistered($user));
-
-    //             return response()->json([
-    //                 'status'  => 'success',
-    //                 'message' => $message,
-    //                 'data'    => [
-    //                     'user' => $user->load('roles') 
-    //                 ]
-    //             ], 201);
-    //         });
-
-    //     } catch (\Exception $e) {
-    //         \Illuminate\Support\Facades\Log::error("Registration Failed: " . $e->getMessage());
-
-    //         return response()->json([
-    //             'status'  => 'error',
-    //             'message' => 'حدث خطأ أثناء إنشاء الحساب، يرجى المحاولة لاحقاً.',
-    //             'debug'   => config('app.debug') ? $e->getMessage() : null 
-    //         ], 500);
-    //     }
-    // }
-   public function store(\Illuminate\Http\Request $request)
-{
-    $validatedData = $request->validate([
-        'first_name' => 'required|string|max:255',
-        'last_name'  => 'required|string|max:255',
-        'identity'   => 'required', 
-        'password'   => 'required|string|min:8|confirmed',
-        'role'       => 'nullable|string|in:client,provider,organizer', 
-    ]);
-
-    $identity = $validatedData['identity'];
-    $isEmail = filter_var($identity, FILTER_VALIDATE_EMAIL);
-    $cleanIdentity = !$isEmail ? $this->authService->formatPhone($identity) : $identity;
-
-    $pendingUser = \App\Models\User::where(function($query) use ($cleanIdentity) {
-                        $query->where('email', $cleanIdentity)
-                              ->orWhere('phone', $cleanIdentity);
-                    })
-                    ->whereNull('email_verified_at')
-                    ->whereNull('phone_verified_at')
-                    ->first();
-
-    if ($pendingUser) {
-        $cacheKey = $isEmail ? 'otp_email_' . $cleanIdentity : 'otp_phone_' . $cleanIdentity; 
-        $hasExpiredOtp = !\Illuminate\Support\Facades\Cache::has($cacheKey);
-
-        if (!$hasExpiredOtp) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'هذا الحساب مسجل بالفعل ولكنه غير مفعل، يرجى تفعيله بكود الـ OTP المرسل إليك.'
-            ], 400);
+            $pendingUser->roles()->detach();  
+            $pendingUser->delete();         
         }
 
-        $pendingUser->roles()->detach();  
-        $pendingUser->delete();         
-    }
+        $userData = [
+            'first_name' => $validatedData['first_name'],
+            'last_name'  => $validatedData['last_name'],
+            'password'   => $validatedData['password'],
+            'email'      => $isEmail ? $cleanIdentity : null,
+            'phone'      => !$isEmail ? $cleanIdentity : null,
+        ];
 
-    $userData = [
-        'first_name' => $validatedData['first_name'],
-        'last_name'  => $validatedData['last_name'],
-        'password'   => $validatedData['password'],
-        'email'      => $isEmail ? $cleanIdentity : null,
-        'phone'      => !$isEmail ? $cleanIdentity : null,
-    ];
+        $roleName = $request->input('role', 'client'); 
 
-    $roleName = $request->input('role', 'client'); 
+        try {
+            $user = \Illuminate\Support\Facades\DB::transaction(function () use ($userData, $roleName) {
+                
+                $user = \App\Models\User::withoutEvents(function () use ($userData) {
+                    return $this->authService->createUser($userData);
+                });
 
-    try {
-        $user = \Illuminate\Support\Facades\DB::transaction(function () use ($userData, $roleName) {
-            
-            $user = \App\Models\User::withoutEvents(function () use ($userData) {
-                return $this->authService->createUser($userData);
+                $user->assignRole($roleName); 
+                return $user;
             });
 
-            $user->assignRole($roleName); 
-            return $user;
-        });
+            $message = $isEmail 
+                ? 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر كود الـ OTP المرسل إلى بريدك الإلكتروني.'
+                : 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر كود الـ OTP المرسل إلى واتساب هاتفك.';
 
-        $message = $isEmail 
-            ? 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر كود الـ OTP المرسل إلى بريدك الإلكتروني.'
-            : 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر كود الـ OTP المرسل إلى واتساب هاتفك.';
+            event(new \App\Events\UserRegistered($user));
 
-        event(new \App\Events\UserRegistered($user));
+            return response()->json([
+                'status'  => 'success',
+                'message' => $message,
+                'data'    => [
+                    'user' => $user->load('roles') 
+                ]
+            ], 201);
 
-        return response()->json([
-            'status'  => 'success',
-            'message' => $message,
-            'data'    => [
-                'user' => $user->load('roles') 
-            ]
-        ], 201);
-
-    } catch (\Exception $e) {
-        \Illuminate\Support\Facades\Log::error("Registration Failed: " . $e->getMessage());
-        return response()->json([
-            'status'  => 'error',
-            'message' => 'حدث خطأ أثناء إنشاء الحساب، يرجى المحاولة لاحقاً.',
-            'debug'   => config('app.debug') ? $e->getMessage() : null 
-        ], 500);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("Registration Failed: " . $e->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'حدث خطأ أثناء إنشاء الحساب، يرجى المحاولة لاحقاً.',
+                'debug'   => config('app.debug') ? $e->getMessage() : null 
+            ], 500);
+        }
     }
-}
+
     public function login(Request $request)
     {
         $credentials = $request->validate([
@@ -253,9 +173,8 @@ class AuthController extends Controller
         }
 
         $user = $result['user'];
-        $user->tokens()->delete();
-
-        $accessToken = $user->createToken('access_token', ['access-api'], now()->addMinutes(15))->plainTextToken;
+        $user->tokens()->where('expires_at', '<', now())->delete();
+        $accessToken = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;
         $refreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
 
         $user->load('roles');
@@ -267,7 +186,7 @@ class AuthController extends Controller
                 'user'          => $user,
                 'access_token'  => $accessToken,
                 'refresh_token' => $refreshToken,
-                'expires_in'    => 15 * 60, 
+                'expires_in'    => 60 * 60, 
             ]
         ], 200);
     }
@@ -305,8 +224,6 @@ class AuthController extends Controller
                     ];
 
                     $user = $this->authService->createUser($userData);
-                    
-                    // إسناد الـ Role الافتراضي لحسابات جوجل الموبايل
                     $user->assignRole('organizer');
                 }
 
@@ -357,7 +274,7 @@ class AuthController extends Controller
         $user->phone_verified_at = now(); 
         $user->save();
 
-        $accessToken = $user->createToken('access_token', ['access-api'])->plainTextToken;
+        $accessToken = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;
         $refreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
 
         $user->load('roles');
@@ -369,42 +286,42 @@ class AuthController extends Controller
                 'user'          => $user,
                 'access_token'  => $accessToken,
                 'refresh_token' => $refreshToken,
-                'expires_in'    => 15 * 60,
+                'expires_in'    => 60 * 60,
             ]
         ], 200);
     }
+public function refresh(Request $request)
+{
+    $user = $request->user();
+    $currentToken = $user->currentAccessToken();
 
-    public function refresh(Request $request)
-    {
-        $user = $request->user();
-        $currentToken = $user->currentAccessToken();
-
-        if (!$currentToken || !$currentToken->can('issue-access-token')) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'غير مصرح بإجراء هذه العملية باستخدام هذا المفتاح.'
-            ], 403);
-        }
-
-        $currentToken->delete();
-
-        $newAccessToken = $user->createToken('access_token', ['access-api'], now()->addMinutes(15))->plainTextToken;
-        $newRefreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
-
+    if (!$currentToken || !$currentToken->can('issue-access-token')) {
         return response()->json([
-            'status' => 'success',
-            'data' => [
-                'access_token'  => $newAccessToken,
-                'refresh_token' => $newRefreshToken,
-                'expires_in'    => 15 * 60,
-            ]
-        ]);
+            'status' => 'error',
+            'message' => 'غير مصرح بإجراء هذه العملية باستخدام هذا المفتاح.'
+        ], 403);
     }
+
+    $user->tokens()->where('expires_at', '<', now())->delete();
+
+    $currentToken->delete();
+
+    $newAccessToken  = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;  
+    $newRefreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
+
+    return response()->json([
+        'status' => 'success',
+        'data' => [
+            'access_token'  => $newAccessToken,
+            'refresh_token' => $newRefreshToken,
+            'expires_in'    => 60 * 60,
+        ]
+    ], 200);
+}
 
     public function logout(Request $request)
     {
-        $request->user()->tokens()->delete();
-
+       $request->user()->currentAccessToken()->delete();
         return response()->json([
             'status' => 'success',
             'message' => 'تم تسجيل الخروج بنجاح وإبطال جميع المفاتيح'

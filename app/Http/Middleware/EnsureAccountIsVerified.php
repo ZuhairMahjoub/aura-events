@@ -18,7 +18,6 @@ class EnsureAccountIsVerified
             ], 401);
         }
 
-        // فحص التفعيل المزدوج
         $isPhoneVerified = !is_null($user->phone_verified_at);
         $isEmailVerified = !is_null($user->email_verified_at); // فحص مباشر للحقل لضمان الأمان
 
