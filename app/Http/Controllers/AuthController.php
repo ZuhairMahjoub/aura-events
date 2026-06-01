@@ -290,33 +290,34 @@ class AuthController extends Controller
             ]
         ], 200);
     }
+public function refresh(Request $request)
+{
+    $user = $request->user();
+    $currentToken = $user->currentAccessToken();
 
-    public function refresh(Request $request)
-    {
-        $user = $request->user();
-        $currentToken = $user->currentAccessToken();
-
-        if (!$currentToken || !$currentToken->can('issue-access-token')) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'غير مصرح بإجراء هذه العملية باستخدام هذا مفتاح.'
-            ], 403);
-        }
-
-        $currentToken->delete();
-
-        $newAccessToken = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;  
-        $newRefreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
-
+    if (!$currentToken || !$currentToken->can('issue-access-token')) {
         return response()->json([
-            'status' => 'success',
-            'data' => [
-                'access_token'  => $newAccessToken,
-                'refresh_token' => $newRefreshToken,
-                'expires_in'    => 60 * 60,
-            ]
-        ]);
+            'status' => 'error',
+            'message' => 'غير مصرح بإجراء هذه العملية باستخدام هذا المفتاح.'
+        ], 403);
     }
+
+    $user->tokens()->where('expires_at', '<', now())->delete();
+
+    $currentToken->delete();
+
+    $newAccessToken  = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;  
+    $newRefreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
+
+    return response()->json([
+        'status' => 'success',
+        'data' => [
+            'access_token'  => $newAccessToken,
+            'refresh_token' => $newRefreshToken,
+            'expires_in'    => 60 * 60,
+        ]
+    ], 200);
+}
 
     public function logout(Request $request)
     {
