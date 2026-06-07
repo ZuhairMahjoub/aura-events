@@ -46,6 +46,12 @@ return [
     'token'       => env('ULTRAMSG_TOKEN'),
     'base_url'    => env('ULTRAMSG_BASE_URL', 'https://api.ultramsg.com'),
 ],
+
+   'firebase' => [
+        'credentials' => env('FIREBASE_CREDENTIALS'),
+    ],
+
+
     
 
 ];

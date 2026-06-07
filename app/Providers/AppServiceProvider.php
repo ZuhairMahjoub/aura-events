@@ -11,9 +11,26 @@ use Illuminate\Http\Request;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
+use App\Services\FirebaseNotificationService;
+use Kreait\Firebase\Contract\Messaging;
+use Kreait\Firebase\Factory;
 
 class AppServiceProvider extends ServiceProvider
 {
+    public function register(): void
+{
+    $this->app->singleton(Messaging::class, function ($app) {
+        $credentials = config('firebase.projects.app.credentials');
+        
+        return (new Factory())
+            ->withServiceAccount($credentials)
+            ->createMessaging();
+    });
+
+    $this->app->singleton(FirebaseNotificationService::class, function ($app) {
+        return new FirebaseNotificationService($app->make(Messaging::class));
+    });
+}
     public function boot(): void
     {
         Event::forget(\Illuminate\Auth\Events\Registered::class);

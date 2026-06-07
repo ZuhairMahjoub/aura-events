@@ -14,18 +14,22 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str; 
 use Illuminate\Support\Facades\Hash;
 use Firebase\JWT\JWT; 
+use App\Models\DeviceToken;
 use App\Services\OtpService;
 use App\Services\AuthService;
+use App\Services\FirebaseNotificationService;
 
 class AuthController extends Controller
 {
     protected $authService;
     protected $otpService;
+   protected $firebaseNotificationService;
 
-    public function __construct(AuthService $authService, OtpService $otpService) 
+    public function __construct(AuthService $authService, OtpService $otpService,FirebaseNotificationService $firebaseNotificationService) 
     {
         $this->authService = $authService;
         $this->otpService = $otpService;
+        $this->firebaseNotificationService=$firebaseNotificationService;
     }
 
     public function redirectToGoogle()
@@ -129,6 +133,15 @@ class AuthController extends Controller
                 : 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر كود الـ OTP المرسل إلى واتساب هاتفك.';
 
             event(new \App\Events\UserRegistered($user));
+            $this->firebaseNotificationService->sendToUser(
+            $user->id,                                     
+            'Welcome to Aura Events',                  
+            'Your account has been created successfully. Welcome aboard!', 
+            [
+                'action' => 'open_verification',           
+                'user_id' => $user->id
+            ]
+        );
 
             return response()->json([
                 'status'  => 'success',
@@ -178,6 +191,15 @@ class AuthController extends Controller
         $refreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
 
         $user->load('roles');
+        $this->firebaseNotificationService->sendToUser(
+            $user->id, 
+            'New Login Detected ', 
+            'Your account was just accessed. If this wasn\'t you, please secure your account.',
+            [
+                'action' => 'security_alert',
+                'time'   => now()->toDateTimeString()
+            ]
+        );
 
         return response()->json([
             'status'  => 'success',
@@ -208,6 +230,7 @@ class AuthController extends Controller
 
             if ($payload) {
                 $user = User::where('email', $payload['email'])->first();
+                $isNewUser = false;
 
                 if (!$user) {
                     $fullName = $payload['name'] ?? 'Google User';
@@ -229,6 +252,21 @@ class AuthController extends Controller
 
                 $token = $user->createToken('google_token')->plainTextToken;
                 $user->load('roles');
+                if ($isNewUser) {
+                $this->firebaseNotificationService->sendToUser(
+                    $user->id,
+                    'Welcome to Aura Events! ',
+                    'Your account has been created via Google successfully. Welcome aboard!',
+                    ['action' => 'open_home']
+                );
+            } else {
+                $this->firebaseNotificationService->sendToUser(
+                    $user->id,
+                    'Google Login Detected ',
+                    'You have successfully logged in using your Google account.',
+                    ['action' => 'security_alert', 'time' => now()->toDateTimeString()]
+                );
+            }
 
                 return response()->json([
                     'status'  => 'success',
@@ -319,14 +357,23 @@ public function refresh(Request $request)
     ], 200);
 }
 
-    public function logout(Request $request)
-    {
-       $request->user()->currentAccessToken()->delete();
-        return response()->json([
-            'status' => 'success',
-            'message' => 'تم تسجيل الخروج بنجاح وإبطال جميع المفاتيح'
-        ], 200);
+   public function logout(Request $request)
+{
+    $user = $request->user();
+
+    if ($request->has('device_token')) {
+        DeviceToken::where('user_id', $user->id)
+            ->where('token', $request->input('device_token'))
+            ->delete();
     }
+
+    $user->currentAccessToken()->delete();
+
+    return response()->json([
+        'status'  => 'success',
+        'message' => 'Successfully logged out and device token revoked.'
+    ], 200);
+}
 
     public function resendOtp(Request $request)
     {
