@@ -43,7 +43,6 @@ class AuthService
 
         $cleanPhone = $this->formatPhone($identity); 
 
-        // البحث عن المستخدم بالبريد الإلكتروني أو الهاتف
         $user = User::where('email', $identity)
                     ->orWhere('phone', $cleanPhone)
                     ->first();

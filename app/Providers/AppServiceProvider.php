@@ -34,10 +34,8 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        // إلغاء حدث التسجيل الافتراضي الخاص بـ لارافيل
         Event::forget(\Illuminate\Auth\Events\Registered::class);
 
-        // 🌟 تسجيل كلا المستمعين لإرسال الإشعار عبر الإيميل والواتساب فوراً
         Event::listen(UserRegistered::class, SendEmailVerification::class);
         Event::listen(UserRegistered::class, SendOtpNotification::class);
 
@@ -45,7 +43,6 @@ class AppServiceProvider extends ServiceProvider
             return config('app.frontend_url')."/password-reset/$token?email={$notifiable->getEmailForPasswordReset()}";
         });
 
-        // 🌟 تعديل الفحص ليعتمد على الـ identity ليعمل الـ Middleware بالشكل الصحيح
         RateLimiter::for('verify-otp', function (Request $request) {
             return Limit::perMinute(5)->by($request->input('identity') ?: $request->ip());
         });
