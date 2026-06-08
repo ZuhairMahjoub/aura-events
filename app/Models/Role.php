@@ -9,7 +9,6 @@ class Role extends SpatieRole
 {
     use HasUlids;
 
-    // لضمان أن الموديل يعرف أن المفتاح الأساسي ليس رقماً تلقائياً
     public $incrementing = false;
     protected $keyType = 'string';
 }

@@ -6,32 +6,37 @@ use App\Events\UserRegistered;
 use App\Services\OtpService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Support\Facades\Cache;
 
 class SendOtpNotification implements ShouldQueue
 {
     use InteractsWithQueue;
-public $tries = 1;
+
+    public $tries = 2; 
     protected OtpService $otpService;
 
-    /**
-     * حقن خدمة الـ OTP
-     */
     public function __construct(OtpService $otpService)
     {
         $this->otpService = $otpService;
     }
 
-    /**
-     */
     public function handle(UserRegistered $event): void
     {
-        if ($event->user->phone) {
+        $user = $event->user;
 
-            $phone = $event->user->phone;
-
-            $code = $this->otpService->generateForPhone($phone);
-
-            $this->otpService->sendViaWhatsapp($phone, $code);
+        if (!$user->phone) {
+            return;
         }
+
+        $sentCacheKey = 'otp_sent_' . $user->phone;
+        if (Cache::has($sentCacheKey)) {
+            return;
+        }
+
+        $code = $this->otpService->generateOtp($user->phone);
+
+        Cache::put($sentCacheKey, true, now()->addSeconds(30));
+
+        $this->otpService->sendViaWhatsapp($user->phone, $code);
     }
 }

@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Events\UserRegistered;
+use App\Events\UserVerified;
 use Google\Client as GoogleClient;
 use Illuminate\Http\Request;
 use Laravel\Socialite\Facades\Socialite; 
 use App\Models\User;
+use App\Models\DeviceToken;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Auth;
 use Exception;
@@ -14,22 +16,22 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str; 
 use Illuminate\Support\Facades\Hash;
 use Firebase\JWT\JWT; 
-use App\Models\DeviceToken;
 use App\Services\OtpService;
 use App\Services\AuthService;
 use App\Services\FirebaseNotificationService;
+use Illuminate\Support\Facades\DB;
 
 class AuthController extends Controller
 {
     protected $authService;
     protected $otpService;
-   protected $firebaseNotificationService;
+    protected $firebaseNotificationService;
 
-    public function __construct(AuthService $authService, OtpService $otpService,FirebaseNotificationService $firebaseNotificationService) 
+    public function __construct(AuthService $authService, OtpService $otpService, FirebaseNotificationService $firebaseNotificationService) 
     {
         $this->authService = $authService;
         $this->otpService = $otpService;
-        $this->firebaseNotificationService=$firebaseNotificationService;
+        $this->firebaseNotificationService = $firebaseNotificationService;
     }
 
     public function redirectToGoogle()
@@ -70,7 +72,7 @@ class AuthController extends Controller
         }
     }
 
-    public function store(\Illuminate\Http\Request $request)
+    public function store(Request $request)
     {
         $validatedData = $request->validate([
             'first_name' => 'required|string|max:255',
@@ -82,24 +84,22 @@ class AuthController extends Controller
 
         $identity = $validatedData['identity'];
         $isEmail = filter_var($identity, FILTER_VALIDATE_EMAIL);
-        $cleanIdentity = !$isEmail ? $this->authService->formatPhone($identity) : $identity;
+        $cleanIdentity = !$isEmail ? $this->otpService->formatPhone($identity) : $identity;
 
-        $pendingUser = \App\Models\User::where(function($query) use ($cleanIdentity) {
-                            $query->where('email', $cleanIdentity)
-                                  ->orWhere('phone', $cleanIdentity);
+        $pendingUser = User::where(function($query) use ($cleanIdentity) {
+                            $query->where('email', $cleanIdentity)->orWhere('phone', $cleanIdentity);
                         })
                         ->whereNull('email_verified_at')
                         ->whereNull('phone_verified_at')
                         ->first();
 
         if ($pendingUser) {
-            $cacheKey = $isEmail ? 'otp_email_' . $cleanIdentity : 'otp_phone_' . $cleanIdentity; 
-            $hasExpiredOtp = !\Illuminate\Support\Facades\Cache::has($cacheKey);
-
-            if (!$hasExpiredOtp) {
+            $cacheKey = $this->otpService->getCacheKey($cleanIdentity);
+            
+            if (Cache::has($cacheKey)) {
                 return response()->json([
                     'status'  => 'error',
-                    'message' => 'هذا الحساب مسجل بالفعل ولكنه غير مفعل، يرجى تفعيله بكود الـ OTP المرسل إليك.'
+                    'message' => 'هذا الحساب مسجل بالفعل ولكنه غير مفعل، يرجى تفعيله بكود الـ OTP المرسل إليك مسبقاً.'
                 ], 400);
             }
 
@@ -118,9 +118,8 @@ class AuthController extends Controller
         $roleName = $request->input('role', 'client'); 
 
         try {
-            $user = \Illuminate\Support\Facades\DB::transaction(function () use ($userData, $roleName) {
-                
-                $user = \App\Models\User::withoutEvents(function () use ($userData) {
+            $user = DB::transaction(function () use ($userData, $roleName) {
+                $user = User::withoutEvents(function () use ($userData) {
                     return $this->authService->createUser($userData);
                 });
 
@@ -128,20 +127,11 @@ class AuthController extends Controller
                 return $user;
             });
 
+            event(new UserRegistered($user));
+
             $message = $isEmail 
                 ? 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر كود الـ OTP المرسل إلى بريدك الإلكتروني.'
                 : 'تم إنشاء الحساب بنجاح. يرجى تفعيل حسابك عبر كود الـ OTP المرسل إلى واتساب هاتفك.';
-
-            event(new \App\Events\UserRegistered($user));
-            $this->firebaseNotificationService->sendToUser(
-            $user->id,                                     
-            'Welcome to Aura Events',                  
-            'Your account has been created successfully. Welcome aboard!', 
-            [
-                'action' => 'open_verification',           
-                'user_id' => $user->id
-            ]
-        );
 
             return response()->json([
                 'status'  => 'success',
@@ -151,12 +141,11 @@ class AuthController extends Controller
                 ]
             ], 201);
 
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("Registration Failed: " . $e->getMessage());
+        } catch (Exception $e) {
+            Log::error("Registration Failed: " . $e->getMessage());
             return response()->json([
                 'status'  => 'error',
-                'message' => 'حدث خطأ أثناء إنشاء الحساب، يرجى المحاولة لاحقاً.',
-                'debug'   => config('app.debug') ? $e->getMessage() : null 
+                'message' => 'حدث خطأ أثناء إنشاء الحساب، يرجى المحاولة لاحقاً.'
             ], 500);
         }
     }
@@ -164,8 +153,9 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $credentials = $request->validate([
-            'identity' => 'required', 
-            'password' => 'required',
+            'identity'     => 'required', 
+            'password'     => 'required',
+            'device_token' => 'nullable|string',
         ]);
 
         $result = $this->authService->login($credentials);
@@ -173,8 +163,8 @@ class AuthController extends Controller
         if ($result['status'] === 'error') {
             if ($result['type'] === 'not_verified') {
                 return response()->json([
-                    'status'  => 'error',
-                    'message' => 'عذراً، يجب تفعيل الحساب أولاً عبر الرابط المرسل لبريدك أو كود الـ OTP.',
+                    'status'      => 'error',
+                    'message'     => 'عذراً، يجب تفعيل الحساب أولاً عبر الرابط المرسل لبريدك أو كود الـ OTP.',
                     'is_verified' => false      
                 ], 403);
             }
@@ -186,14 +176,23 @@ class AuthController extends Controller
         }
 
         $user = $result['user'];
+
+        if ($request->filled('device_token')) {
+            DeviceToken::updateOrCreate(
+                ['device_token' => $request->input('device_token')],
+                ['user_id'      => $user->id]
+            );
+        }
+
         $user->tokens()->where('expires_at', '<', now())->delete();
         $accessToken = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;
         $refreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
 
         $user->load('roles');
+
         $this->firebaseNotificationService->sendToUser(
             $user->id, 
-            'New Login Detected ', 
+            'New Login Detected 🔒', 
             'Your account was just accessed. If this wasn\'t you, please secure your account.',
             [
                 'action' => 'security_alert',
@@ -233,6 +232,7 @@ class AuthController extends Controller
                 $isNewUser = false;
 
                 if (!$user) {
+                    $isNewUser = true;
                     $fullName = $payload['name'] ?? 'Google User';
                     $nameParts = explode(' ', $fullName, 2);
                     
@@ -250,23 +250,31 @@ class AuthController extends Controller
                     $user->assignRole('organizer');
                 }
 
+                if ($request->filled('device_token')) {
+                    DeviceToken::updateOrCreate(
+                        ['device_token' => $request->input('device_token')],
+                        ['user_id'      => $user->id]
+                    );
+                }
+
                 $token = $user->createToken('google_token')->plainTextToken;
                 $user->load('roles');
+
                 if ($isNewUser) {
-                $this->firebaseNotificationService->sendToUser(
-                    $user->id,
-                    'Welcome to Aura Events! ',
-                    'Your account has been created via Google successfully. Welcome aboard!',
-                    ['action' => 'open_home']
-                );
-            } else {
-                $this->firebaseNotificationService->sendToUser(
-                    $user->id,
-                    'Google Login Detected ',
-                    'You have successfully logged in using your Google account.',
-                    ['action' => 'security_alert', 'time' => now()->toDateTimeString()]
-                );
-            }
+                    $this->firebaseNotificationService->sendToUser(
+                        $user->id,
+                        'Welcome to Aura Events! 🎉',
+                        'Your account has been created via Google successfully. Welcome aboard!',
+                        ['action' => 'open_home']
+                    );
+                } else {
+                    $this->firebaseNotificationService->sendToUser(
+                        $user->id,
+                        'Google Login Detected 🔑',
+                        'You have successfully logged in using your Google account.',
+                        ['action' => 'security_alert', 'time' => now()->toDateTimeString()]
+                    );
+                }
 
                 return response()->json([
                     'status'  => 'success',
@@ -285,15 +293,23 @@ class AuthController extends Controller
             ], 500);
         }
     }
-       
+        
     public function verifyOtp(Request $request)
     {
         $validated = $request->validate([
-            'phone' => 'required|string',
-            'code'  => 'required|string|min:6',
+            'identity'     => 'required|string', 
+            'code'         => 'required_without:otp|string|min:6',
+            'otp'          => 'required_without:code|string|min:6',
+            'device_token' => 'nullable|string', 
         ]);
 
-        $isValid = $this->otpService->verifyOtp($validated['phone'], $validated['code']);
+        $identity = $validated['identity'];
+        $otpCode = $request->input('code') ?? $request->input('otp');
+        
+        $isEmail = filter_var($identity, FILTER_VALIDATE_EMAIL);
+        $cleanIdentity = !$isEmail ? $this->otpService->formatPhone($identity) : $identity;
+
+        $isValid = $this->otpService->verifyOtp($cleanIdentity, $otpCode);
 
         if (!$isValid) {
             return response()->json([
@@ -302,24 +318,45 @@ class AuthController extends Controller
             ], 422);
         }
 
-        $formattedPhone = $this->otpService->formatPhone($validated['phone']);
-        $user = User::where('phone', $formattedPhone)->first();
+        $user = User::where(function($query) use ($cleanIdentity) {
+                    $query->where('email', $cleanIdentity)->orWhere('phone', $cleanIdentity);
+                })->first();
         
         if (!$user) {
             return response()->json(['status' => 'error', 'message' => 'المستخدم غير موجود'], 404);
         }
 
-        $user->phone_verified_at = now(); 
+        if ($isEmail) {
+            $user->email_verified_at = now();
+        } else {
+            $user->phone_verified_at = now(); 
+        }
         $user->save();
 
-        $accessToken = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;
+        if ($request->filled('device_token')) {
+            DeviceToken::updateOrCreate(
+                ['device_token' => $request->input('device_token')],
+                ['user_id'      => $user->id]
+            );
+        }
+
+        $user->tokens()->where('expires_at', '<', now())->delete();
+
+        $accessToken  = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;
         $refreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
 
         $user->load('roles');
 
+        $this->firebaseNotificationService->sendToUser(
+            $user->id,
+            'Welcome to Aura Events! 🎉',
+            'Your account has been verified successfully. Welcome aboard!',
+            ['action' => 'open_home', 'user_id' => $user->id]
+        );
+
         return response()->json([
             'status'  => 'success',
-            'message' => 'تم التحقق بنجاح',
+            'message' => 'تم التحقق بنجاح وتفعيل الحساب.',
             'data'    => [
                 'user'          => $user,
                 'access_token'  => $accessToken,
@@ -328,52 +365,52 @@ class AuthController extends Controller
             ]
         ], 200);
     }
-public function refresh(Request $request)
-{
-    $user = $request->user();
-    $currentToken = $user->currentAccessToken();
 
-    if (!$currentToken || !$currentToken->can('issue-access-token')) {
+    public function refresh(Request $request)
+    {
+        $user = $request->user();
+        $currentToken = $user->currentAccessToken();
+
+        if (!$currentToken || !$currentToken->can('issue-access-token')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'غير مصرح بإجراء هذه العملية باستخدام هذا مفتاح.'
+            ], 403);
+        }
+
+        $user->tokens()->where('expires_at', '<', now())->delete();
+        $currentToken->delete();
+
+        $newAccessToken  = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;  
+        $newRefreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
+
         return response()->json([
-            'status' => 'error',
-            'message' => 'غير مصرح بإجراء هذه العملية باستخدام هذا المفتاح.'
-        ], 403);
+            'status' => 'success',
+            'data' => [
+                'access_token'  => $newAccessToken,
+                'refresh_token' => $newRefreshToken,
+                'expires_in'    => 60 * 60,
+            ]
+        ], 200);
     }
 
-    $user->tokens()->where('expires_at', '<', now())->delete();
+    public function logout(Request $request)
+    {
+        $user = $request->user();
 
-    $currentToken->delete();
+        if ($request->has('device_token')) {
+            DeviceToken::where('user_id', $user->id)
+                ->where('device_token', $request->input('device_token'))
+                ->delete();
+        }
 
-    $newAccessToken  = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;  
-    $newRefreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
+        $user->currentAccessToken()->delete();
 
-    return response()->json([
-        'status' => 'success',
-        'data' => [
-            'access_token'  => $newAccessToken,
-            'refresh_token' => $newRefreshToken,
-            'expires_in'    => 60 * 60,
-        ]
-    ], 200);
-}
-
-   public function logout(Request $request)
-{
-    $user = $request->user();
-
-    if ($request->has('device_token')) {
-        DeviceToken::where('user_id', $user->id)
-            ->where('token', $request->input('device_token'))
-            ->delete();
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Successfully logged out and device token revoked.'
+        ], 200);
     }
-
-    $user->currentAccessToken()->delete();
-
-    return response()->json([
-        'status'  => 'success',
-        'message' => 'Successfully logged out and device token revoked.'
-    ], 200);
-}
 
     public function resendOtp(Request $request)
     {
@@ -384,7 +421,7 @@ public function refresh(Request $request)
         $identity = $validatedData['identity'];
         $cleanIdentity = $this->otpService->formatPhone($identity);
 
-        $user = \App\Models\User::where('phone', $cleanIdentity)
+        $user = User::where('phone', $cleanIdentity)
                     ->whereNull('email_verified_at')
                     ->whereNull('phone_verified_at')
                     ->first();
@@ -397,7 +434,7 @@ public function refresh(Request $request)
         }
 
         try {
-            $newCode = $this->otpService->generateForPhone($cleanIdentity);
+            $newCode = $this->otpService->generateOtp($cleanIdentity);
             $isSent = $this->otpService->sendViaWhatsapp($cleanIdentity, $newCode);
 
             if ($isSent) {
@@ -413,7 +450,7 @@ public function refresh(Request $request)
             ], 500);
 
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("Resend OTP Failed: " . $e->getMessage());
+            Log::error("Resend OTP Failed: " . $e->getMessage());
 
             return response()->json([
                 'status'  => 'error',

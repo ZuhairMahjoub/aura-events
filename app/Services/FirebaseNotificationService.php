@@ -23,7 +23,7 @@ class FirebaseNotificationService
     public function sendToUser(string $userId, string $title, string $body, array $data = []): array
     {
         try {
-            $tokens = DeviceToken::where('user_id', $userId)->pluck('token')->toArray();
+            $tokens = DeviceToken::where('user_id', $userId)->pluck('device_token')->toArray();
 
             if (empty($tokens)) {
                 Log::warning("Firebase: No device tokens found for user ID: {$userId}");
@@ -79,7 +79,7 @@ class FirebaseNotificationService
     protected function handleInvalidTokens(array $invalidTokens): void
     {
         if (!empty($invalidTokens)) {
-            DeviceToken::whereIn('token', $invalidTokens)->delete();
+            DeviceToken::whereIn('device_token', $invalidTokens)->delete();
             Log::info("Firebase: Cleaned up " . count($invalidTokens) . " invalid device tokens from database.");
         }
     }

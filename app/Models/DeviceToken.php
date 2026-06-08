@@ -10,7 +10,7 @@ class DeviceToken extends Model
     use HasUlids;
     protected $fillable=[
         'user_id',
-        'token'
+        'device_token'
     ];
 
     public function user(){

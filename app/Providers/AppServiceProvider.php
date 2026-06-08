@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Events\UserRegistered;
 use App\Listeners\SendEmailVerification;
+use App\Listeners\SendOtpNotification;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -11,39 +12,44 @@ use Illuminate\Http\Request;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
-use App\Services\FirebaseNotificationService;
 use Kreait\Firebase\Contract\Messaging;
 use Kreait\Firebase\Factory;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
-{
-    $this->app->singleton(Messaging::class, function ($app) {
-        $credentials = config('firebase.projects.app.credentials');
-        
-        return (new Factory())
-            ->withServiceAccount($credentials)
-            ->createMessaging();
-    });
+    {
+        $this->app->singleton(Messaging::class, function ($app) {
+            $credentials = env('FIREBASE_CREDENTIALS', 'storage/app/firebase/royal-event-app-firebase-adminsdk-fbsvc-02740649a6.json');
+            
+            $fullPath = is_array($credentials) ? $credentials : base_path($credentials);
 
-    $this->app->singleton(FirebaseNotificationService::class, function ($app) {
-        return new FirebaseNotificationService($app->make(Messaging::class));
-    });
-}
+            if (!is_array($fullPath) && !file_exists($fullPath)) {
+                throw new \Exception("Firebase credentials file not found at: " . $fullPath);
+            }
+
+            return (new Factory)->withServiceAccount($fullPath)->createMessaging();
+        });
+    }
+
     public function boot(): void
     {
+        // إلغاء حدث التسجيل الافتراضي الخاص بـ لارافيل
         Event::forget(\Illuminate\Auth\Events\Registered::class);
 
+        // 🌟 تسجيل كلا المستمعين لإرسال الإشعار عبر الإيميل والواتساب فوراً
         Event::listen(UserRegistered::class, SendEmailVerification::class);
+        Event::listen(UserRegistered::class, SendOtpNotification::class);
 
         ResetPassword::createUrlUsing(function (object $notifiable, string $token) {
             return config('app.frontend_url')."/password-reset/$token?email={$notifiable->getEmailForPasswordReset()}";
         });
 
+        // 🌟 تعديل الفحص ليعتمد على الـ identity ليعمل الـ Middleware بالشكل الصحيح
         RateLimiter::for('verify-otp', function (Request $request) {
-            return Limit::perMinute(5)->by($request->input('phone') ?: $request->ip());
+            return Limit::perMinute(5)->by($request->input('identity') ?: $request->ip());
         });
+
         Route::aliasMiddleware('is_admin', \App\Http\Middleware\EnsureUserIsAdmin::class);
     }
 
