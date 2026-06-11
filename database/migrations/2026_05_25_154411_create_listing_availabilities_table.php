@@ -1,4 +1,5 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -18,6 +19,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['listing_variant_id', 'available_date'], 'variant_date_unique');
+            $table->softDeletes();
         });
     }
 

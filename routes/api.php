@@ -7,12 +7,12 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\CategoryController;
-use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\ProviderAuthController;
 use App\Http\Middleware\EnsureEmailIsVerified;
 use App\Http\Middleware\EnsureAccountIsVerified;
 use App\Http\Controllers\ListingController;
-
+use App\Http\Controllers\DistrictsController;
+use App\Http\Controllers\TempUploadController;
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'store']); 
@@ -43,7 +43,7 @@ Route::post('/otp/resend', [AuthController::class, 'resendOtp']);
 Route::post('/auth/verify-email-otp', [EmailVerificationNotificationController::class, 'verifyOtp']);
 
 Route::get('/categories', [CategoryController::class, 'index']);
-    Route::get('/districts', [DistrictController::class, 'index']);
+    Route::get('/districts', [DistrictsController::class, 'index']);
 
     
 Route::middleware(['auth:sanctum', EnsureAccountIsVerified::class])->group(function () {
@@ -52,8 +52,10 @@ Route::middleware(['auth:sanctum', EnsureAccountIsVerified::class])->group(funct
     
 });
 Route::middleware(['auth:sanctum'])->group(function () {
-    
+            Route::post('/uploads/temp', [TempUploadController::class, 'upload']);
+
     Route::prefix('listings')->group(function () {
+        
         Route::get('/', [ListingController::class, 'index'])->middleware('permission:view listings');
         Route::get('/{listing}', [ListingController::class, 'show'])->middleware('permission:view listings');
 

@@ -49,6 +49,14 @@ class CompleteProfileRequest extends FormRequest
             'string', 
             'unique:freelancer_details,national_id'
         ],
+        'experience_years' =>
+         [
+            'required_if:provider_type,freelancer', 
+            'nullable', 
+            'integer', 
+            'unique:freelancer_details,experience_years'
+        ],
+        
         // 🌟 التحقق من مصفوفة الأقسام
         'categories'    => 'required|array|min:1', // يجب إرسال قسم واحد على الأقل
         'categories.*'  => 'exists:categories,id', // التأكد

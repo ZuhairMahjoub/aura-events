@@ -10,51 +10,107 @@ use Exception;
 
 class ListingService
 {
-  
-    public function getAllListings(int $perPage = 15)
+    protected MediaService $mediaService;
+
+    public function __construct(MediaService $mediaService)
     {
-        return Listing::with(['variants.availabilities.slots', 'category', 'district'])
+        $this->mediaService = $mediaService;
+    }
+  
+   public function getAllListings(int $perPage = 15)
+    {
+        return Listing::with([
+                'variants.availabilities.slots', 
+                'variants.images', // إضافة صور الـ Variants
+                'images',          // إضافة صور الـ Listing الأساسية
+                'category', 
+                'district'
+            ])
             ->latest()
             ->paginate($perPage);
     }
+    public function getListingById(string $id): Listing
+{
+    // جلب العرض مع كافة العلاقات المتداخلة لضمان عودة البيانات كاملة للـ Resource
+    return Listing::with([
+            'category', 
+            'district',
+            'images', 
+            'variants.images',
+            'variants.availabilities.slots'
+        ])
+        ->findOrFail($id); // ترمي خطأ 404 تلقائياً إذا كان المعرّف غير موجود
+}
+    
+public function createListingWithGraph(array $data): Listing
+{
+    return DB::transaction(function () use ($data) {
 
-    public function getListingById(Listing $listing): Listing
-    {
-        return $listing->load(['variants.availabilities.slots', 'category', 'district']);
-    }
+        $listing = Listing::create([
+            'provider_id'                => $data['provider_id'],
+            'category_id'                => $data['category_id'],
+            'district_id'                => $data['district_id'],
+            
+            'title'                      => $data['title'], 
+            'description'                => $data['description'],
+            
+            'listing_type'               => $data['listing_type'],
+            
+            // حقول اختيارية بناءً على نوع المنتج أو البيانات المرسلة
+            'material_composition'       => $data['material_composition'] ?? null,
+            'secondary_contact_number'   => $data['secondary_contact_number'] ?? null,
+            
+            // حقول الإلغاء والسياسات (تأخذ القيمة المرسلة أو الافتراضية false)
+            'cancel_before_acceptance'   => $data['cancel_before_acceptance'] ?? false,
+            'cancel_after_acceptance'    => $data['cancel_after_acceptance'] ?? false,
+            'cancel_before_payment'      => $data['cancel_before_payment'] ?? false,
+            'is_provider_location_based' => $data['is_provider_location_based'] ?? true,
+            
+            // حالة المراجعة (تبدأ كـ draft بشكل افتراضي كما في الميجريشن أو حسب المرسل)
+            'moderation_status'          => $data['moderation_status'] ?? 'draft',
+            'rejection_reason'           => $data['rejection_reason'] ?? null,
+        ]);
 
-  
-    public function createListingWithGraph(array $data): Listing
-    {
-        return DB::transaction(function () use ($data) {
-
-            $listing = Listing::create([
-                'provider_id'  => $data['provider_id'],
-                'category_id'  => $data['category_id'],
-                'district_id'  => $data['district_id'],
-                'title'        => $data['title'],
-                'description'  => $data['description'],
-                'listing_type' => $data['listing_type'],
-            ]);
-
-            foreach ($data['variants'] as $variantData) {
-
-                $variant = $listing->variants()->create(
-                    $this->buildVariantPayload($variantData)
+        // معالجة ونقل صور الـ Listing الأساسية
+        if (!empty($data['images'])) {
+            foreach ($data['images'] as $tempPath) {
+                $this->mediaService->moveAndAttach(
+                    $tempPath, 
+                    $listing, 
+                    "listings/{$listing->id}/main"
                 );
+            }
+        }
 
-                if (empty($variantData['availabilities'])) continue;
+        // إنشاء الـ Variants
+        foreach ($data['variants'] as $variantData) {
 
-                $this->bulkInsertAvailabilitiesAndSlots($variant, $variantData['availabilities']);
+            $variant = $listing->variants()->create(
+                $this->buildVariantPayload($variantData)
+            );
+
+            // معالجة ونقل صور الـ Variant
+            if (!empty($variantData['images'])) {
+                foreach ($variantData['images'] as $tempPath) {
+                    $this->mediaService->moveAndAttach(
+                        $tempPath, 
+                        $variant, 
+                        "listings/{$listing->id}/variants",
+                        "Variant Image - " . ($variantData['variant_name']['en'] ?? 'Default')
+                    );
+                }
             }
 
-            return $listing->load('variants.availabilities.slots');
-        });
-    }
+            if (empty($variantData['availabilities'])) continue;
 
+            $this->bulkInsertAvailabilitiesAndSlots($variant, $variantData['availabilities']);
+        }
+
+return $listing->load(['variants.availabilities.slots', 'images', 'variants.images', 'category', 'district']);    });
+}
     
 
-    public function updateListingWithGraph(Listing $listing, array $data): Listing
+  public function updateListingWithGraph(Listing $listing, array $data): Listing
     {
         return DB::transaction(function () use ($listing, $data) {
 
@@ -73,6 +129,17 @@ class ListingService
                 fn($value) => !is_null($value)
             ));
 
+            // 🌟 الإضافة هنا: معالجة ونقل صور الـ Listing الأساسية المرسلة
+            if (!empty($data['images'])) {
+                foreach ($data['images'] as $tempPath) {
+                    $this->mediaService->moveAndAttach(
+                        $tempPath, 
+                        $listing, 
+                        "listings/{$listing->id}/main"
+                    );
+                }
+            }
+
             if (!isset($data['variants'])) {
                 return $listing->load('variants.availabilities.slots');
             }
@@ -84,7 +151,7 @@ class ListingService
                 ->values()
                 ->toArray();
 
-           
+            
             $listing->variants()
                 ->whereNotIn('id', $sentVariantIds)
                 ->get()
@@ -101,6 +168,18 @@ class ListingService
                     );
                 }
 
+                // 🌟 الإضافة هنا: معالجة ونقل صور الـ Variant المرسلة
+                if (!empty($variantData['images'])) {
+                    foreach ($variantData['images'] as $tempPath) {
+                        $this->mediaService->moveAndAttach(
+                            $tempPath, 
+                            $variant, 
+                            "listings/{$listing->id}/variants",
+                            "Variant Image - " . ($variantData['variant_name']['en'] ?? 'Default')
+                        );
+                    }
+                }
+
                 if (!isset($variantData['availabilities'])) continue;
 
                 $this->syncAvailabilities($variant, $variantData['availabilities']);
@@ -109,7 +188,6 @@ class ListingService
             return $listing->load('variants.availabilities.slots');
         });
     }
-
    
     public function deleteListing(Listing $listing): bool
     {

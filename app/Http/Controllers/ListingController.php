@@ -9,8 +9,10 @@ use App\Services\ListingService;
 use App\Http\Resources\ListingResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Support\Facades\Gate;
+
 
 class ListingController extends Controller
 {
@@ -54,18 +56,20 @@ class ListingController extends Controller
     }
 
    
-    public function show(Listing $listing): JsonResponse
-    {
-        Gate::authorize('view', $listing);
+   public function show(Listing $listing): JsonResponse
+{
+    // 🔒 لارافيل سيفحص دالة view داخل الـ ListingPolicy ويمرر لها الـ $listing تلقائياً
+    Gate::authorize('view', $listing);
 
-        $enrichedListing = $this->listingService->getListingById($listing);
+    // شحن العلاقات مسبقاً (Eager Loading) لحل مشكلة الـ N+1 وضمان سرعة الأداء
+    $listing->load(['category', 'district', 'images', 'variants.images', 'variants.availabilities.slots']);
 
-        return response()->json([
-            'success' => true,
-            'data'    => new ListingResource($enrichedListing)
-        ], Response::HTTP_OK);
-    }
-
+    return response()->json([
+        'success' => true,
+        'message' => 'Listing retrieved successfully.',
+        'data'    => new ListingResource($listing)
+    ], 200);
+}
   
    public function update(UpdateListingRequest $request, Listing $listing)
 {
