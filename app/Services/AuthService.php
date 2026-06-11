@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 
 class AuthService
 {
+    
     public function createUser(array $data): User
     {
         return User::create([
@@ -26,14 +27,13 @@ class AuthService
         ]);
     }
 
+    
     public function formatPhone(string $phone): string
     {
         return preg_replace('/\D/', '', $phone);
     }
     
-    /**
-     * منطق تسجيل الدخول الموحد والآمن
-     */
+    
     public function login(array $data): array
     {
         $identity = $data['identity'] ?? null; 
@@ -51,11 +51,13 @@ class AuthService
             return ['status' => 'error', 'type' => 'invalid_credentials', 'code' => 401];
         }
 
-        // تحقق التفعيل الموحد: طالما أحدهما مفعّل يمر تسجيل الدخول
         if (is_null($user->email_verified_at) && is_null($user->phone_verified_at)) {
             return ['status' => 'error', 'type' => 'not_verified', 'code' => 403];
         }
 
-        return ['status' => 'success', 'user' => $user];
+        return [
+            'status' => 'success',
+            'user'   => $user
+        ];
     }
 }

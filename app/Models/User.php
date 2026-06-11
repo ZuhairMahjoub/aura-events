@@ -17,7 +17,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Laravel\Sanctum\HasApiTokens;
 
-// 🔥 تم حذف implements MustVerifyEmail لقطع الرابط القديم نهائياً
 class User extends Authenticatable implements AuthCanResetPassword
 {
     /** @use HasFactory<UserFactory> */
@@ -69,7 +68,6 @@ class User extends Authenticatable implements AuthCanResetPassword
 
     public function providerProfile()
 {
-    // ربط مستخدم واحد بمزود خدمة واحد باستخدام الـ ULIDs
     return $this->hasOne(Provider::class, 'user_id', 'id');
 }
     /**
@@ -125,4 +123,10 @@ class User extends Authenticatable implements AuthCanResetPassword
 
     parent::notify($instance);
 }
+    public function deviceTokens(){
+        return $this->hasMany(DeviceToken::class);
+    }
+    public function notifications(){
+        return $this->hasMany(Notification::class);
+    }
 }

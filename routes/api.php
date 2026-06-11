@@ -14,6 +14,7 @@ use App\Http\Middleware\EnsureEmailIsVerified;
 use App\Http\Middleware\EnsureAccountIsVerified;
 use App\Http\Controllers\ListingController;
 use App\Http\Controllers\AdminProviderController; 
+use App\Http\Controllers\Api\NotificationController;
 
 
 Route::prefix('auth')->group(function () {
@@ -72,4 +73,14 @@ Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function
     Route::put('/listings/{id}/approve', [AdminListingController::class, 'approve']);
     Route::put('/listings/{id}/reject', [AdminListingController::class, 'reject']);
 
+});
+Route::middleware('auth:sanctum')->group(function () {
+    
+    Route::get('/notifications', [NotificationController::class, 'all']);
+    
+    Route::patch('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    
+    Route::post('/notifications/test', [NotificationController::class, 'sendTestNotification']);
+    Route::post('/device-token', [NotificationController::class, 'updateToken']);
+    
 });
