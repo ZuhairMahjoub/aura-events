@@ -27,71 +27,49 @@ class StoreListingRequest extends FormRequest
 
     public function rules(): array
     {
-        return [
-            // البيانات الأساسية والربط
+        // 1. نتحقق هل النوع المرسل هو منتج مادي أم لا
+        $isPhysicalProduct = $this->input('listing_type') === 'physical_product';
+
+        // 2. القواعد الأساسية (الثابتة لكل الأنواع)
+        $rules = [
             'provider_id'                => ['required', 'string'],
             'category_id'                => ['required', 'integer'],
             'district_id'                => ['required', 'integer'],
-            
-            // حقول الترجمة للعنوان والوصف
-            'title'                      => ['required', 'array', function ($attribute, $value, $fail) {
-                if (blank($value['ar'] ?? null) && blank($value['en'] ?? null)) {
-                    $fail('يجب إدخال العنوان باللغة العربية أو الإنجليزية على الأقل.');
-                }
-            }],
-            'title.ar'                   => ['nullable', 'string', 'max:255'],
-            'title.en'                   => ['nullable', 'string', 'max:255'],
-            
-            'description'                => ['required', 'array', function ($attribute, $value, $fail) {
-                if (blank($value['ar'] ?? null) && blank($value['en'] ?? null)) {
-                    $fail('يجب إدخال الوصف باللغة العربية أو الإنجليزية على الأقل.');
-                }
-            }],
-            'description.ar'             => ['nullable', 'string'],
-            'description.en'             => ['nullable', 'string'],
-            
+            'title'                      => ['required', 'array'],
+            'description'                => ['required', 'array'],
             'listing_type'               => ['required', Rule::in(['physical_product', 'service', 'package'])],
             
-            'material_composition'       => ['nullable', 'string', 'max:255'],
-            'secondary_contact_number'   => ['nullable', 'string', 'max:50'],
-            'cancel_before_acceptance'   => ['nullable', 'boolean'],
-            'cancel_after_acceptance'    => ['nullable', 'boolean'],
-            'cancel_before_payment'      => ['nullable', 'boolean'],
-            'is_provider_location_based' => ['nullable', 'boolean'],
-            'moderation_status'          => ['nullable', Rule::in(['draft', 'pending_approval'])], // المزود يرسلها فقط كمسودة أو طلب موافقة
-
-            'images'                     => ['nullable', 'array'],
-            'images.*'                   => ['nullable', 'string'], 
-
             'variants'                   => ['required', 'array', 'min:1'],
-            'variants.*.variant_name'    => ['required', 'array', function ($attribute, $value, $fail) {
-                if (blank($value['ar'] ?? null) && blank($value['en'] ?? null)) {
-                    $fail('يجب إدخال اسم الباقة باللغة العربية أو الإنجليزية على الأقل.');
-                }
-            }],
-            'variants.*.variant_name.ar' => ['nullable', 'string', 'max:255'],
-            'variants.*.variant_name.en' => ['nullable', 'string', 'max:255'],
-            
-            'variants.*.images'          => ['nullable', 'array'],
-            'variants.*.images.*'        => ['nullable', 'string'],
-
-            'variants.*.price'            => ['required', 'numeric', 'min:0'],
-            'variants.*.currency'         => ['nullable', 'string', 'size:3'], // تم تغييرها لـ size:3 لتطابق رموز العملات مثل USD
-            'variants.*.price_type'       => ['nullable', Rule::in(['fixed', 'hourly'])],
-            'variants.*.stock_quantity'   => ['nullable', 'integer', 'min:0'], 
-            'variants.*.dynamic_attributes'=> ['nullable', 'array'],
-
-            'variants.*.availabilities'                                 => ['nullable', 'array'],
-            'variants.*.availabilities.*.available_date'                => ['required', 'date', 'after_or_equal:today'],
-            'variants.*.availabilities.*.is_blocked'                    => ['nullable', 'boolean'],
-
-            'variants.*.availabilities.*.slots'                         => ['nullable', 'array'],
-            'variants.*.availabilities.*.slots.*.slot_name'             => ['nullable', 'array'],
-            'variants.*.availabilities.*.slots.*.slot_name.ar'          => ['nullable', 'string', 'max:255'],
-            'variants.*.availabilities.*.slots.*.slot_name.en'          => ['nullable', 'string', 'max:255'],
-            'variants.*.availabilities.*.slots.*.start_time'            => ['required', 'date_format:H:i'], 
-            'variants.*.availabilities.*.slots.*.end_time'              => ['required', 'date_format:H:i', 'after:variants.*.availabilities.*.slots.*.start_time'], // ميزة ذكية للتأكد أن وقت النهاية بعد البداية
-            'variants.*.availabilities.*.slots.*.remaining_capacity'    => ['nullable', 'integer', 'min:1'],
+            'variants.*.variant_name'    => ['required', 'array'],
+            'variants.*.price'           => ['required', 'numeric', 'min:0'],
         ];
+
+        // 3. قواعد مخصصة بناءً على النوع
+        if ($isPhysicalProduct) {
+            // إذا كان منتجاً: المخزون إجباري، والتواريخ غير مطلوبة إطلاقاً
+            $rules['variants.*.stock_quantity'] = ['required', 'integer', 'min:0'];
+            $rules['variants.*.date_range']     = ['nullable', 'array'];
+            $rules['variants.*.availabilities'] = ['nullable', 'array'];
+        } else {
+            // إذا كان خدمة أو قاعة: المخزون اختياري، ويجب إرسال أحد نظامي التواريخ
+            $rules['variants.*.stock_quantity'] = ['nullable', 'integer', 'min:0'];
+            
+            // --- النظام الجديد: date_range ---
+            $rules['variants.*.date_range']            = ['nullable', 'array', 'required_without:variants.*.availabilities'];
+            $rules['variants.*.date_range.start_date'] = ['required_with:variants.*.date_range', 'date', 'after_or_equal:today'];
+            $rules['variants.*.date_range.end_date']   = ['required_with:variants.*.date_range', 'date', 'after_or_equal:variants.*.date_range.start_date'];
+            $rules['variants.*.date_range.slots']      = ['required_with:variants.*.date_range', 'array'];
+            $rules['variants.*.date_range.slots.*.start_time'] = ['required_with:variants.*.date_range.slots', 'date_format:H:i'];
+            $rules['variants.*.date_range.slots.*.end_time']   = ['required_with:variants.*.date_range.slots', 'date_format:H:i'];
+
+            // --- النظام القديم: availabilities ---
+            $rules['variants.*.availabilities']        = ['nullable', 'array', 'required_without:variants.*.date_range'];
+            $rules['variants.*.availabilities.*.available_date'] = ['required_with:variants.*.availabilities', 'date', 'after_or_equal:today'];
+            $rules['variants.*.availabilities.*.slots']          = ['required_with:variants.*.availabilities', 'array'];
+            $rules['variants.*.availabilities.*.slots.*.start_time'] = ['required_with:variants.*.availabilities.*.slots', 'date_format:H:i'];
+            $rules['variants.*.availabilities.*.slots.*.end_time']   = ['required_with:variants.*.availabilities.*.slots', 'date_format:H:i'];
+        }
+
+        return $rules;
     }
 }
