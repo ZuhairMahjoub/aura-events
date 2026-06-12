@@ -12,6 +12,7 @@ use App\Http\Middleware\EnsureEmailIsVerified;
 use App\Http\Middleware\EnsureAccountIsVerified;
 use App\Http\Controllers\ListingController;
 use App\Http\Controllers\DistrictsController;
+use App\Http\Controllers\JobOfferController;
 use App\Http\Controllers\TempUploadController;
 
 Route::prefix('auth')->group(function () {
@@ -63,7 +64,17 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::post('/', [ListingController::class, 'store'])->middleware('permission:create listings');
             Route::put('/{listing}', [ListingController::class, 'update'])->middleware('permission:update listings');
             Route::delete('/{listing}', [ListingController::class, 'destroy'])->middleware('permission:delete listings');
-        });
-    });
 
-});
+        });});
+
+           Route::middleware('approved_provider')->group(function () {
+        Route::post('/job-offers', [JobOfferController::class, 'store']); 
+        Route::get('/company/applicants', [JobOfferController::class, 'getApplicants']); 
+        Route::put('/contracts/{id}/status', [JobOfferController::class, 'updateApplicantStatus']);
+
+        Route::post('/job-offers/{id}/apply', [JobOfferController::class, 'apply']);    
+
+});});
+
+    
+ 
