@@ -176,7 +176,7 @@ class AuthController extends Controller
         }
 
         $user = $result['user'];
-
+        $user->update(['status' => 'active']);
         if ($request->filled('device_token')) {
             DeviceToken::updateOrCreate(
                 ['device_token' => $request->input('device_token')],
@@ -249,6 +249,7 @@ class AuthController extends Controller
                     $user = $this->authService->createUser($userData);
                     $user->assignRole('organizer');
                 }
+                $user->update(['status' => 'active']);
 
                 if ($request->filled('device_token')) {
                     DeviceToken::updateOrCreate(
@@ -394,23 +395,25 @@ class AuthController extends Controller
         ], 200);
     }
 
-    public function logout(Request $request)
-    {
-        $user = $request->user();
+   public function logout(Request $request)
+{
+    $user = $request->user();
 
-        if ($request->has('device_token')) {
-            DeviceToken::where('user_id', $user->id)
-                ->where('device_token', $request->input('device_token'))
-                ->delete();
-        }
-
-        $user->currentAccessToken()->delete();
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Successfully logged out and device token revoked.'
-        ], 200);
+    if ($request->has('device_token')) {
+        DeviceToken::where('user_id', $user->id)
+            ->where('device_token', $request->input('device_token'))
+            ->delete();
     }
+
+    $user->update(['status' => 'inactive']); 
+
+    $user->currentAccessToken()->delete();
+
+    return response()->json([
+        'status'  => 'success',
+        'message' => 'Successfully logged out, device token revoked, and account set to inactive.'
+    ], 200);
+}
 
     public function resendOtp(Request $request)
     {

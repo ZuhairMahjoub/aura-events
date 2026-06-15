@@ -51,7 +51,7 @@ Route::get('/districts', [DistrictController::class, 'index']);
     
 Route::middleware(['auth:sanctum', EnsureAccountIsVerified::class])->group(function () {
     Route::post('/provider/complete-profile', [ProviderAuthController::class, 'store']);
-});
+    Route::get('/providers/{id}', [ProviderAuthController::class, 'showProvider']);});
 
 Route::middleware(['auth:sanctum'])->group(function () {
     
