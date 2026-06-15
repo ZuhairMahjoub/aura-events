@@ -28,4 +28,9 @@ class JobOffer extends Model
     {
         return $this->hasMany(CompanyFreelancerContract::class, 'job_offer_id');
     }
+    // في App\Models\JobOffer.php
+public function provider()
+{
+    return $this->belongsTo(\App\Models\Provider::class, 'company_id');
+}
 }

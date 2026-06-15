@@ -7,10 +7,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class ListingVariant extends Model
 {
-    use HasUlids, SoftDeletes;
+    use HasUlids, SoftDeletes, HasFactory;
 protected $keyType = 'string';
 public $incrementing = false; 
     protected $fillable = [
@@ -38,4 +39,16 @@ public $incrementing = false;
 {
     return $this->morphMany(Image::class, 'imageable');
 }
+    public function packageItems() 
+    {
+        return $this->hasMany(PackageItem::class, 'package_variant_id');
+    }
+
+    /**
+     * إذا كان هذا الخيار نفسه مستخدماً ومدرجاً داخل باقات أخرى
+     */
+    public function usageInPackages()
+    {
+        return $this->hasMany(PackageItem::class, 'included_variant_id');
+    }
 }

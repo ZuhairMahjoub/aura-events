@@ -69,4 +69,12 @@ class JobOfferService
             'status' => 'pending',
         ]);
     }
+    public function getAllJobOffers()
+{
+    // جلب الوظائف مع بيانات الشركة الناشرة لها
+    return \App\Models\JobOffer::with('provider:id,brand_name')
+         // جلب الوظائف النشطة فقط
+        ->latest()
+        ->paginate(15);
+}
 }

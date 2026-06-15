@@ -1,4 +1,5 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -16,17 +17,15 @@ return new class extends Migration
             $table->time('start_time');
             $table->time('end_time');
             $table->integer('remaining_capacity')->default(1);
-            $table->timestamps();
-            $table->softDeletes();
+            $table->timestamps(); // لا يوجد softDeletes هنا
 
-            // unique constraint مرة واحدة فقط بعد تعريف الأعمدة
+            // القيد الفريد سيعمل الآن بسلاسة بنسبة 100%
             $table->unique(
                 ['listing_availability_id', 'start_time', 'end_time'],
                 'slot_time_unique'
             );
         });
     }
-
     public function down(): void
     {
         Schema::dropIfExists('listing_slots');

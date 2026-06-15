@@ -93,7 +93,19 @@ $company = $request->user()->providerProfile;       // التحقق من أن ا
             'data' => $contract
         ], 200);
     }
+// في App\Services\JobOfferService.php
 
+// في App\Http\Controllers\JobOfferController.php
+
+public function index(): JsonResponse
+{
+    $jobOffers = $this->jobOfferService->getAllJobOffers();
+
+    return response()->json([
+        'success' => true,
+        'data' => $jobOffers
+    ], 200);
+}
     /**
      * [خاص بالتطبيق] فريلانسر يقدم على وظيفة
      */

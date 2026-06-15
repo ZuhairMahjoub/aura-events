@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ArrangementController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use Illuminate\Http\Request;
@@ -68,13 +69,23 @@ Route::middleware(['auth:sanctum'])->group(function () {
         });});
 
            Route::middleware('approved_provider')->group(function () {
-        Route::post('/job-offers', [JobOfferController::class, 'store']); 
-        Route::get('/company/applicants', [JobOfferController::class, 'getApplicants']); 
+        Route::post('/job-offers', [JobOfferController::class, 'store']);
+        Route::get('/company/applicants', [JobOfferController::class, 'getApplicants']);
         Route::put('/contracts/{id}/status', [JobOfferController::class, 'updateApplicantStatus']);
 
-        Route::post('/job-offers/{id}/apply', [JobOfferController::class, 'apply']);    
+        Route::post('/job-offers/{id}/apply', [JobOfferController::class, 'apply']);
 
-});});
+        Route::prefix('arrangements')->group(function () {
+            Route::post('/', [ArrangementController::class, 'store'])->middleware('throttle:10,1');
+            Route::get('/{arrangementId}', [ArrangementController::class, 'show']);
+            Route::put('/{arrangementId}', [ArrangementController::class, 'update']);
+        });
+
+        Route::get('/provider/my-products', [ArrangementController::class, 'getMyProducts']);
+        Route::get('/provider/available-freelancers', [ArrangementController::class, 'getFreelancersList']);
+        Route::get('/job-offers', [JobOfferController::class, 'index']);
+    });});
+
 
     
  

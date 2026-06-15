@@ -1,17 +1,14 @@
 <?php
 namespace App\Http\Controllers;
-
 use App\Http\Controllers\Controller;
-use App\Http\Requests\StoreListingRequest;
 use App\Http\Requests\UpdateListingRequest;
+use App\Http\Requests\StoreListingRequest;
 use App\Models\Listing;
 use App\Services\ListingService;
 use App\Http\Resources\ListingResource;
-use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Http\JsonResponse;
 
 
 class ListingController extends Controller

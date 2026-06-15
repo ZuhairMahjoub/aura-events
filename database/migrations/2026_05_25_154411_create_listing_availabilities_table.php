@@ -19,7 +19,6 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['listing_variant_id', 'available_date'], 'variant_date_unique');
-            $table->softDeletes();
         });
     }
 

@@ -38,7 +38,8 @@ class StoreListingRequest extends FormRequest
             'title'                      => ['required', 'array'],
             'description'                => ['required', 'array'],
             'listing_type'               => ['required', Rule::in(['physical_product', 'service', 'package'])],
-            
+            'images'                => ['nullable', 'array'],
+        'images.*'              => ['string'], // تأكد أن كل عنصر هو مسار نصي
             'variants'                   => ['required', 'array', 'min:1'],
             'variants.*.variant_name'    => ['required', 'array'],
             'variants.*.price'           => ['required', 'numeric', 'min:0'],
@@ -61,7 +62,21 @@ class StoreListingRequest extends FormRequest
             $rules['variants.*.date_range.slots']      = ['required_with:variants.*.date_range', 'array'];
             $rules['variants.*.date_range.slots.*.start_time'] = ['required_with:variants.*.date_range.slots', 'date_format:H:i'];
             $rules['variants.*.date_range.slots.*.end_time']   = ['required_with:variants.*.date_range.slots', 'date_format:H:i'];
-
+// أضف هذه القاعدة داخل الـ rules() في StoreListingRequest
+$rules['variants.*.availabilities'] = [
+    'nullable', 
+    'array', 
+    'required_without:variants.*.date_range',
+    function ($attribute, $value, $fail) {
+        // استخراج جميع التواريخ المرسلة في هذا الـ variant
+        $dates = collect($value)->pluck('available_date');
+        
+        // التحقق من وجود تكرار
+        if ($dates->duplicates()->isNotEmpty()) {
+            $fail('تحتوي قائمة التواريخ على قيم مكررة، يرجى إدخال كل تاريخ مرة واحدة فقط.');
+        }
+    },
+];
             // --- النظام القديم: availabilities ---
             $rules['variants.*.availabilities']        = ['nullable', 'array', 'required_without:variants.*.date_range'];
             $rules['variants.*.availabilities.*.available_date'] = ['required_with:variants.*.availabilities', 'date', 'after_or_equal:today'];
