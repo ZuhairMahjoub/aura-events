@@ -53,8 +53,6 @@ Route::post('/auth/verify-email-otp', [EmailVerificationNotificationController::
 Route::get('/categories', [CategoryController::class, 'index']);
     Route::get('/districts', [DistrictsController::class, 'index']);
 
-#>>>>>>> develop
-
     
 Route::middleware(['auth:sanctum', EnsureAccountIsVerified::class])->group(function () {
     Route::post('/provider/complete-profile', [ProviderAuthController::class, 'store']);
@@ -114,18 +112,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
 
 
-    
- 
-    }); 
-}); 
-Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function () {
+   Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function () {
     
     Route::put('/providers/{id}/approve', [AdminProviderController::class, 'approve']);
     Route::put('/providers/{id}/reject', [AdminProviderController::class, 'reject']);
     Route::put('/listings/{id}/approve', [AdminListingController::class, 'approve']);
     Route::put('/listings/{id}/reject', [AdminListingController::class, 'reject']);
 
-});
+}); 
 Route::middleware('auth:sanctum')->group(function () {
     
     Route::get('/notifications', [NotificationController::class, 'all']);
@@ -136,3 +130,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/device-token', [NotificationController::class, 'updateToken']);
     
 });
+
+ 
+  
