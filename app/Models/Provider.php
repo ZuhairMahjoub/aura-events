@@ -55,4 +55,8 @@ public function activeContracts()
     {
         return $this->morphMany(Image::class, 'mediable');
     }
+    public function bookings()
+    {
+        return $this->hasMany(Booking::class);
+    }
 }

@@ -37,4 +37,8 @@ class ListingSlot extends Model
     {
         return $this->belongsTo(ListingAvailability::class, 'listing_availability_id');
     }
+    public function bookings()
+    {
+        return $this->hasMany(Booking::class, 'listing_slot_id');
+    }
 }

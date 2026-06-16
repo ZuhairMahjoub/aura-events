@@ -14,6 +14,7 @@ class PackageFreelancer extends Model
         'package_variant_id',
         'freelancer_id',
         'contract_id',
+        
     ];
 
     /**

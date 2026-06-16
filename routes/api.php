@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
+use App\Http\Controllers\BookingController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ProviderAuthController;
 use App\Http\Middleware\EnsureEmailIsVerified;
@@ -40,6 +41,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 Route::post('forgot-password', [PasswordResetLinkController::class, 'store']);
 Route::post('verify-otp', [NewPasswordController::class, 'verifyOtp']);
 Route::post('reset-password', [NewPasswordController::class, 'store']);
+    Route::get('/admin/users', [AuthController::class, 'getFilteredUsers']);
 
 Route::post('/otp/resend', [AuthController::class, 'resendOtp']);
 Route::post('/auth/verify-email-otp', [EmailVerificationNotificationController::class, 'verifyOtp']);
@@ -55,6 +57,8 @@ Route::middleware(['auth:sanctum', EnsureAccountIsVerified::class])->group(funct
 });
 Route::middleware(['auth:sanctum'])->group(function () {
             Route::post('/uploads/temp', [TempUploadController::class, 'upload']);
+            Route::get('listings/{listingId}/images', [TempUploadController::class, 'index']);
+
 
     Route::prefix('listings')->group(function () {
         
@@ -74,17 +78,35 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::put('/contracts/{id}/status', [JobOfferController::class, 'updateApplicantStatus']);
 
         Route::post('/job-offers/{id}/apply', [JobOfferController::class, 'apply']);
+            Route::get('/provider/inventory', [ListingController::class, 'getCompanyInventory']);
+
 
         Route::prefix('arrangements')->group(function () {
             Route::post('/', [ArrangementController::class, 'store'])->middleware('throttle:10,1');
             Route::get('/{arrangementId}', [ArrangementController::class, 'show']);
             Route::put('/{arrangementId}', [ArrangementController::class, 'update']);
+            Route::get('my-products', [ArrangementController::class, 'getMyProducts']);
+    Route::get('my-services', [ArrangementController::class, 'getMyServices']);       // API جديد 
+    Route::get('my-all-products', [ArrangementController::class, 'getMyAllProducts']); // API جديد
         });
 
         Route::get('/provider/my-products', [ArrangementController::class, 'getMyProducts']);
         Route::get('/provider/available-freelancers', [ArrangementController::class, 'getFreelancersList']);
         Route::get('/job-offers', [JobOfferController::class, 'index']);
     });});
+    Route::middleware('auth:sanctum')->group(function () {
+    
+    // إنشاء حجز جديد
+    Route::post('/bookings', [BookingController::class, 'store']);
+    
+    // إلغاء حجز محدد
+    Route::post('/bookings/{bookingId}/cancel', [BookingController::class, 'cancel']);
+    
+    // يمكنك إضافة المزيد لاحقاً مثل:
+    // Route::get('/bookings', [BookingController::class, 'index']); // عرض قائمة الحجوزات
+
+});
+
 
 
     

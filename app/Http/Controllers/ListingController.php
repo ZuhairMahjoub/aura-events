@@ -3,13 +3,14 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateListingRequest;
 use App\Http\Requests\StoreListingRequest;
+use App\Http\Resources\ArrangementResource;
 use App\Models\Listing;
 use App\Services\ListingService;
 use App\Http\Resources\ListingResource;
 use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Http\JsonResponse;
-
+use Illuminate\Http\Request;
 
 class ListingController extends Controller
 {
@@ -19,7 +20,51 @@ class ListingController extends Controller
     {
         $this->listingService = $listingService;
     }
+public function getCompanyInventory(Request $request): JsonResponse
+    {
+        $provider = $request->user()->providerProfile;
 
+        if (!$provider) {
+            return response()->json([
+                'success' => false,
+                'message' => 'ملف الشركة غير موجود.',
+            ], 403);
+        }
+
+        // 1. جلب الصالات (Halls) مع علاقاتها الخاصة (مثل الحجوزات أو الميزات إن وجدت)
+        $halls = Listing::where('provider_id', $provider->id)
+            ->where('listing_type', 'hall') // أو النوع المعتمد لديك للصالات في الـ DB
+            ->with(['images', 'category', 'district', 'variants'])
+            ->get();
+
+        // 2. جلب المنتجات المادية (Physical Products)
+        $products = Listing::where('provider_id', $provider->id)
+            ->where('listing_type', 'physical_product')
+            ->with(['images', 'category', 'district', 'variants'])
+            ->get();
+
+        // 3. جلب البكجات / الترتيبات الجاهزة (Packages) مع علاقاتها المعقدة كاملة
+        $packages = Listing::where('provider_id', $provider->id)
+            ->where('listing_type', 'package')
+            ->with([
+                'variants.packageItems.includedVariant.listing',
+                'variants.packageFreelancers.freelancer',
+                'images',
+                'category',
+                'district'
+            ])
+            ->get();
+
+        // 4. إرجاع النتيجة منسقة ومقسمة نظيفة للفرونت إند
+        return response()->json([
+            'success' => true,
+            'data'    => [
+                'halls'    => ListingResource::collection($halls),       // ريسورس الصالات والخدمات
+                'products' => ListingResource::collection($products),    // ريسورس المنتجات
+                'packages' => ArrangementResource::collection($packages), // ريسورس البكجات المخصص
+            ]
+        ], Response::HTTP_OK);
+    }
   
     public function index(): JsonResponse
     {
@@ -53,20 +98,20 @@ class ListingController extends Controller
     }
 
    
-   public function show(Listing $listing): JsonResponse
-{
-    // 🔒 لارافيل سيفحص دالة view داخل الـ ListingPolicy ويمرر لها الـ $listing تلقائياً
-    Gate::authorize('view', $listing);
+//    public function show(Listing $listing): JsonResponse
+// {
+//     // 🔒 لارافيل سيفحص دالة view داخل الـ ListingPolicy ويمرر لها الـ $listing تلقائياً
+//     Gate::authorize('view', $listing);
 
-    // شحن العلاقات مسبقاً (Eager Loading) لحل مشكلة الـ N+1 وضمان سرعة الأداء
-    $listing->load(['category', 'district', 'images', 'variants.images', 'variants.availabilities.slots']);
+//     // شحن العلاقات مسبقاً (Eager Loading) لحل مشكلة الـ N+1 وضمان سرعة الأداء
+//     $listing->load(['category', 'district', 'images', 'variants.images', 'variants.availabilities.slots']);
 
-    return response()->json([
-        'success' => true,
-        'message' => 'Listing retrieved successfully.',
-        'data'    => new ListingResource($listing)
-    ], 200);
-}
+//     return response()->json([
+//         'success' => true,
+//         'message' => 'Listing retrieved successfully.',
+//         'data'    => new ListingResource($listing)
+//     ], 200);
+// }
   
    public function update(UpdateListingRequest $request, Listing $listing)
 {
@@ -89,5 +134,28 @@ class ListingController extends Controller
             'success' => true,
             'message' => 'Listing soft-deleted successfully.'
         ], Response::HTTP_OK);
+    }
+    public function show(string $id, Request $request)
+    {
+        // 1. جلب الـ Listing مع جميع العلاقات المطلوبة
+        $listing = Listing::with([
+            'images', 
+            'variants.packageItems.includedVariant.listing',
+            'variants.packageFreelancers.freelancer',
+            'category',
+            'district'
+        ])->findOrFail($id);
+
+        // 2. التحقق من الصلاحية (أن الـ Listing يتبع الـ Provider الخاص بالمستخدم)
+        // ملاحظة: افترضنا أن المستخدم لديه علاقة provider()
+        // if ($listing->provider_id !== $request->user()->provider_id) {
+        //     return response()->json(['message' => 'غير مصرح لك بالوصول لهذه البيانات'], 403);
+        // }
+
+        // 3. إرجاع البيانات
+        return response()->json([
+            'status' => 'success',
+            'data' => $listing
+        ]);
     }
 }

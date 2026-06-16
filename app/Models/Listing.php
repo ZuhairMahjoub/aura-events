@@ -57,4 +57,8 @@ use HasUlids, HasFactory;
     {
         return $this->morphMany(Image::class, 'imageable');
     }
+    public function bookings(): HasMany
+    {
+        return $this->hasMany(Booking::class);
+    }
 }

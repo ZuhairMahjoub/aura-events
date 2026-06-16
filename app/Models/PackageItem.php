@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -13,10 +12,17 @@ class PackageItem extends Model
     protected $keyType = 'string';
     public $incrementing = false;
 
-    protected $fillable = ['package_variant_id', 'included_variant_id', 'quantity'];
+    // أزلنا 'package_items' من هنا لأنها تسبب الخطأ
+    protected $fillable = [
+        'package_variant_id', 
+        'included_variant_id', 
+        'quantity', 
+        'metadata'
+    ];
 
     protected $casts = [
         'quantity' => 'integer',
+        'metadata' => 'array',
     ];
 
     public function packageVariant()

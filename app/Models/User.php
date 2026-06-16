@@ -111,7 +111,10 @@ class User extends Authenticatable implements AuthCanResetPassword
             'phone_verified_at' => $this->freshTimestamp(),
         ])->save();
     }
-
+public function bookings()
+    {
+        return $this->hasMany(Booking::class);
+    }
     /**
      * تركناها احتياطاً لضمان عدم حدوث خطأ إذا استُدعيت من أي مكان آخر بالخلفية
      */
