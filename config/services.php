@@ -40,12 +40,18 @@ return [
         'redirect'=>env('GOOGLE_REDIRECT_URI'),
         'android'=>env('ANDROID_GOOGLE_CLIENT_ID')
     ],
+    
     'ultramsg' => [
     'instance_id' => env('ULTRAMSG_INSTANCE_ID'),
     'token'       => env('ULTRAMSG_TOKEN'),
     'base_url'    => env('ULTRAMSG_BASE_URL', 'https://api.ultramsg.com'),
 ],
-    
+
+   'firebase' => [
+        'credentials' => env('FIREBASE_CREDENTIALS'),
+    ],
+
+
     
 
 ];

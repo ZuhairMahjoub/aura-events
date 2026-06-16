@@ -35,7 +35,6 @@ class VerifyEmailOtpMail extends Mailable
      */
     public function content(): Content
     {
-        // 🎯 الـ htmlString هون مغلق تماماً وصافي كرمال الـ API ومستحيل الحزمة تحقن جواته روابط
         return new Content(
             htmlString: "
                 <div style='direction: rtl; text-align: center; font-family: Arial, sans-serif; padding: 30px; background-color: #ffffff;'>

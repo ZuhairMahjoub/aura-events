@@ -3,60 +3,57 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use App\Models\Role;  
-use App\Models\Permission;
+use App\Models\User;
+use App\Models\Role; // تأكد من استدعاء الموديل المخصص عندك
+use App\Models\Permission; // تأكد من استدعاء الموديل المخصص عندك
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class RoleSeeder extends Seeder
 {
     public function run(): void
     {
-        // 1. تنظيف الكاش الخاص بسباتي لتجنب أي تضارب أثناء الـ Seeding
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // 2. تعريف الأدوار الموحدة على حارس الـ API فقط
         $apiRoles = ['admin', 'provider', 'organizer', 'client'];
-        
         foreach ($apiRoles as $roleName) {
-            Role::firstOrCreate([
-                'name'       => $roleName, 
-                'guard_name' => 'api' // 🔒 توحيد الحارس بالكامل ليتوافق مع الـ Tokens
-            ]);
+            Role::firstOrCreate(
+                ['name' => $roleName, 'guard_name' => 'api'],
+                ['id' => (string) Str::ulid()]
+            );
         }
 
-        // 3. تعريف صلاحيات كتلة العروض (Listings Permissions)
-        $listingPermissions = [
-            'view listings',
-            'create listings',
-            'update listings',
-            'delete listings'
-        ];
-
-        foreach ($listingPermissions as $permissionName) {
-            Permission::firstOrCreate([
-                'name'       => $permissionName, 
-                'guard_name' => 'api'
-            ]);
+        $permissions = ['view listings', 'create listings', 'update listings', 'delete listings'];
+        foreach ($permissions as $permName) {
+            Permission::firstOrCreate(
+                ['name' => $permName, 'guard_name' => 'api'],
+                ['id' => (string) Str::ulid()]
+            );
         }
 
-        // 4. ربط الصلاحيات بالأدوار (Role-Permission Mapping)
+        $provider = Role::where('name', 'provider')->where('guard_name', 'api')->first();
+        $provider->syncPermissions(['view listings', 'create listings', 'update listings', 'delete listings']);
 
-        // أ. منح دور المزود (Provider) الصلاحيات الكاملة لإدارة عروضه
-        $providerRole = Role::where(['name' => 'provider', 'guard_name' => 'api'])->first();
-        if ($providerRole) {
-            $providerRole->syncPermissions($listingPermissions);
-        }
+        $organizer = Role::where('name', 'organizer')->where('guard_name', 'api')->first();
+        $organizer->syncPermissions(['view listings']);
 
-        // ب. منح دور المنظم (Organizer) صلاحية استعراض العروض فقط ليختار منها للمناسبات
-        $organizerRole = Role::where(['name' => 'organizer', 'guard_name' => 'api'])->first();
-        if ($organizerRole) {
-            $organizerRole->syncPermissions(['view listings']);
-        }
+        $admin = Role::where('name', 'admin')->where('guard_name', 'api')->first();
+        $admin->syncPermissions(Permission::where('guard_name', 'api')->get());
 
-        // ج. منح دور الـ Admin الصلاحية المطلقة على كل شيء بالسيستم
-        $adminRole = Role::where(['name' => 'admin', 'guard_name' => 'api'])->first();
-        if ($adminRole) {
-            // الـ Admin يأخذ كل الصلاحيات الموجودة في جدول الـ Permissions تلقائياً
-            $adminRole->syncPermissions(Permission::where('guard_name', 'api')->get());
-        }
+        $adminUser = User::firstOrCreate(
+            ['email' => 'admin@aura.com'],
+            [
+                'first_name' => 'Zuhair',
+                'last_name' => 'Admin',
+                'phone' => '0912345678',
+                'password' => Hash::make('Admin@12345'),
+                'email_verified_at' => now(),
+                'phone_verified_at' => now(),
+            ]
+        );
+
+        $adminUser->assignRole($admin);
+
+        $this->command->info('Seeding completed successfully!');
     }
 }

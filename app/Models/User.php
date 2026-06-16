@@ -17,7 +17,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Laravel\Sanctum\HasApiTokens;
 
-// 🔥 تم حذف implements MustVerifyEmail لقطع الرابط القديم نهائياً
 class User extends Authenticatable implements AuthCanResetPassword
 {
     /** @use HasFactory<UserFactory> */
@@ -34,9 +33,10 @@ class User extends Authenticatable implements AuthCanResetPassword
         'email',
         'phone',
         'phone_verified_at',
-        'email_verified_at', // تمت إضافته لكي يسمح بتحديثه عند التسجيل عبر جوجل
+        'email_verified_at',
         'city_id',
         'password',
+        'status',
         'settings_language',
         'provider',
         'provider_id',
@@ -69,7 +69,6 @@ class User extends Authenticatable implements AuthCanResetPassword
 
     public function providerProfile()
 {
-    // ربط مستخدم واحد بمزود خدمة واحد باستخدام الـ ULIDs
     return $this->hasOne(Provider::class, 'user_id', 'id');
 }
     /**
@@ -103,7 +102,6 @@ class User extends Authenticatable implements AuthCanResetPassword
      */
   
     /**
-     * توثيق رقم الهاتف وتحديث الوقت
      */
     public function markPhoneAsVerified()
     {
@@ -116,22 +114,23 @@ public function bookings()
         return $this->hasMany(Booking::class);
     }
     /**
-     * تركناها احتياطاً لضمان عدم حدوث خطأ إذا استُدعيت من أي مكان آخر بالخلفية
      */
     public function sendEmailVerificationNotification()
     {
-        // نتركها فارغة تماماً لتعطيل الرابط الافتراضي القديم
     }public function notify($instance)
 {
-    // 🎯 جلب اسم الكلاس الكامل للإشعار يلي عم يحاول ينبعث
     $notificationClass = get_class($instance);
 
-    // ❌ إذا كان اسم الكلاس بيحتوي على كلمة "Verify" أو "EmailVerification" امسكه واحظره فوراً!
     if (str_contains($notificationClass, 'Verify') || str_contains($notificationClass, 'EmailVerification')) {
         return; 
     }
 
-    // باقي الإشعارات (مثل ResetPassword) بتمر عادي
     parent::notify($instance);
 }
+    public function deviceTokens(){
+        return $this->hasMany(DeviceToken::class);
+    }
+    public function notifications(){
+        return $this->hasMany(Notification::class);
+    }
 }

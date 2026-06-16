@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\CompleteProfileRequest;
+use App\Models\Provider;
 use App\Services\ProviderService;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class ProviderAuthController extends Controller
@@ -40,6 +43,7 @@ class ProviderAuthController extends Controller
         }
 
         $provider = $this->providerService->completeProfile(
+
             $user,
             $request->validated()
         );
@@ -59,6 +63,28 @@ class ProviderAuthController extends Controller
             'status'  => 'error',
             'message' => 'حدث خطأ أثناء معالجة البيانات، يرجى المحاولة لاحقاً.'
         ], 500);
+    }
+}
+public function showProvider(string $id): JsonResponse
+{
+    try {
+        $provider = $this->providerService->findProviderById($id);
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => [
+                'id'                => $provider->id,
+                'name'              => $provider->user->first_name . ' ' . $provider->user->last_name,
+                'email'             => $provider->user->email,
+                'brand_name'        => $provider->brand_name,
+                'provider_type'     => $provider->provider_type, // <-- إضافة الحقل هنا
+                'moderation_status' => $provider->moderation_status,
+                'is_verified'       => (bool) $provider->is_verified,
+                'created_at'        => $provider->created_at,
+            ]
+        ]);
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        return response()->json(['message' => 'المزود غير موجود'], 404);
     }
 }
 }

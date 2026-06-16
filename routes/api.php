@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ArrangementController;
+use App\Http\Controllers\AdminListingController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use Illuminate\Http\Request;
@@ -16,6 +17,9 @@ use App\Http\Controllers\ListingController;
 use App\Http\Controllers\DistrictsController;
 use App\Http\Controllers\JobOfferController;
 use App\Http\Controllers\TempUploadController;
+use App\Http\Controllers\AdminProviderController; 
+use App\Http\Controllers\Api\NotificationController;
+
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'store']); 
@@ -49,12 +53,13 @@ Route::post('/auth/verify-email-otp', [EmailVerificationNotificationController::
 Route::get('/categories', [CategoryController::class, 'index']);
     Route::get('/districts', [DistrictsController::class, 'index']);
 
+#>>>>>>> develop
+
     
 Route::middleware(['auth:sanctum', EnsureAccountIsVerified::class])->group(function () {
-    
     Route::post('/provider/complete-profile', [ProviderAuthController::class, 'store']);
-    
-});
+    Route::get('/providers/{id}', [ProviderAuthController::class, 'showProvider']);});
+
 Route::middleware(['auth:sanctum'])->group(function () {
             Route::post('/uploads/temp', [TempUploadController::class, 'upload']);
             Route::get('listings/{listingId}/images', [TempUploadController::class, 'index']);
@@ -111,3 +116,23 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     
  
+    }); 
+}); 
+Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function () {
+    
+    Route::put('/providers/{id}/approve', [AdminProviderController::class, 'approve']);
+    Route::put('/providers/{id}/reject', [AdminProviderController::class, 'reject']);
+    Route::put('/listings/{id}/approve', [AdminListingController::class, 'approve']);
+    Route::put('/listings/{id}/reject', [AdminListingController::class, 'reject']);
+
+});
+Route::middleware('auth:sanctum')->group(function () {
+    
+    Route::get('/notifications', [NotificationController::class, 'all']);
+    
+    Route::patch('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    
+    Route::post('/notifications/test', [NotificationController::class, 'sendTestNotification']);
+    Route::post('/device-token', [NotificationController::class, 'updateToken']);
+    
+});
