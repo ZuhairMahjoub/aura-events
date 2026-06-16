@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Provider;
 use App\Models\User;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -22,6 +23,7 @@ class ProviderService
                 'brand_name'        => $data['brand_name'],
                 'provider_type'     => $data['provider_type'],
                 'is_verified'       => false,
+                'moderation_status' => 'pending',
             ]);
 
 
@@ -42,7 +44,17 @@ class ProviderService
             return $provider;
         });
     }
+   
+public function findProviderById(string $id)
+    {
+        $provider = Provider::with('user')->find($id);
 
+        if (!$provider) {
+            throw new ModelNotFoundException('المزود غير موجود في النظام.');
+        }
+
+        return $provider;
+    }
     /**
      * حفظ بيانات الشركة
      */
