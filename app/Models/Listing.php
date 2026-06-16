@@ -6,13 +6,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
 
 class Listing extends Model
 {
-    use HasUlids, SoftDeletes;
-
+use HasUlids, HasFactory;
     protected $keyType = 'string';
     public $incrementing = false;
 
@@ -56,5 +56,9 @@ class Listing extends Model
     public function images(): MorphMany
     {
         return $this->morphMany(Image::class, 'imageable');
+    }
+    public function bookings(): HasMany
+    {
+        return $this->hasMany(Booking::class);
     }
 }

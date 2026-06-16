@@ -9,10 +9,11 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Provider extends Model
 {
-    use HasUlids;
+    use HasUlids , HasFactory;
 
     protected $fillable = [
         'user_id',
@@ -26,7 +27,12 @@ class Provider extends Model
         'moderation_status',        
         'rejection_reason'
     ];
-
+// في app/Models/Provider.php
+public function activeContracts()
+{
+    return $this->hasMany(CompanyFreelancerContract::class, 'freelancer_id')
+                ->where('status', 'active');
+}
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
@@ -50,5 +56,9 @@ class Provider extends Model
     public function images(): MorphMany
     {
         return $this->morphMany(Image::class, 'mediable');
+    }
+    public function bookings()
+    {
+        return $this->hasMany(Booking::class);
     }
 }

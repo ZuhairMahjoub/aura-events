@@ -3,10 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\District;
-use App\Models\Districts;
 use Illuminate\Http\JsonResponse;
 
-class DistrictController extends Controller
+class DistrictsController extends Controller
 {
     
     public function index(): JsonResponse

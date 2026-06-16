@@ -71,6 +71,80 @@ class AuthController extends Controller
             return response()->json(['error' => 'Auth Failed: ' . $e->getMessage()], 500);
         }
     }
+    /**
+ * GET /admin/users
+ * جلب جميع المستخدمين أو مزودي الخدمة بناءً على فلاتر ديناميكية مرسلة من الفرونت إند.
+ */
+public function getFilteredUsers(\Illuminate\Http\Request $request): \Illuminate\Http\JsonResponse
+{
+    try {
+        $query = \App\Models\User::query();
+
+        // 1. الفلترة حسب الدور (provider, client, organizer) إذا تم إرساله
+        if ($request->filled('role')) {
+            $query->role($request->input('role'));
+        }
+
+        // 2. الفلترة حسب حالة الحساب في الـ Profile (pending, approved, rejected)
+        if ($request->filled('status')) {
+            $status = $request->input('status');
+            $query->whereHas('providerProfile', function ($q) use ($status) {
+                $q->where('status', $status);
+            });
+        }
+
+        // 3. الفلترة حسب التفعيل (مفعل الحساب بريد/هاتف أم لا)
+        if ($request->has('verified')) {
+            $isVerified = filter_var($request->input('verified'), FILTER_VALIDATE_BOOLEAN);
+            
+            if ($isVerified) {
+                $query->where(function ($q) {
+                    $q->whereNotNull('email_verified_at')
+                      ->orWhereNotNull('phone_verified_at');
+                });
+            } else {
+                $query->whereNull('email_verified_at')
+                      ->whereNull('phone_verified_at');
+            }
+        }
+
+        // 4. نظام بحث ذكي (Search) بالاسم، الإيميل، أو رقم الهاتف
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                  ->orWhere('last_name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('phone', 'like', "%{$search}%");
+            });
+        }
+
+        // جلب البيانات مع العلاقات والـ Pagination
+        $users = $query->with(['providerProfile'])
+            ->latest()
+            ->paginate($request->input('per_page', 15)); // إمكانية التحكم بعدد العناصر بالصفحة
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $users->items(),
+            'meta'   => [
+                'current_page' => $users->currentPage(),
+                'last_page'    => $users->lastPage(),
+                'total'        => $users->total(),
+                'per_page'     => $users->perPage(),
+            ]
+        ], 200);
+
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error("Fetch Filtered Users Failed: " . $e->getMessage());
+        
+        return response()->json([
+            'status'  => 'error',
+            'message' => 'حدث خطأ أثناء جلب البيانات المفلترة.',
+            'debug'   => config('app.debug') ? $e->getMessage() : null
+        ], 500);
+    }
+}
 
     public function store(Request $request)
     {

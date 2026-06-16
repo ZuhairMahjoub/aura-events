@@ -38,7 +38,7 @@ class ProviderService
 
             // 3. تحديث حالة المستخدم ليتم قفل الرابط عبر الميدل-وير فوراً
             $user->update([
-                'is_profile_completed' => true
+                'is_profile_completed' => 1
             ]);
 
             return $provider;

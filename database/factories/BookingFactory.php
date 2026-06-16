@@ -2,13 +2,13 @@
 
 namespace Database\Factories;
 
-use App\Models\ListingVariant;
+use App\Models\Booking;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends Factory<ListingVariant>
+ * @extends Factory<Booking>
  */
-class ListingVariantFactory extends Factory
+class BookingFactory extends Factory
 {
     /**
      * Define the model's default state.

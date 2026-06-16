@@ -1,0 +1,250 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests\ArrangementStoreRequest;
+use App\Http\Requests\ArrangementUpdateRequest;
+use App\Http\Resources\ArrangementResource;
+use App\Models\Listing;
+use App\Services\ArrangementService;
+use Exception;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+
+class ArrangementController extends Controller
+{
+    public function __construct(protected ArrangementService $arrangementService)
+    {
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────
+    // Package CRUD
+    // ────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * POST /arrangements
+     * Create a new ready-arrangement (package listing).
+     */
+    public function store(ArrangementStoreRequest $request): JsonResponse
+    {
+        $provider = $request->user()->providerProfile;
+
+        if (! $provider) {
+            return response()->json([
+                'success' => false,
+                'message' => 'ملف الشركة غير موجود.',
+            ], 403);
+        }
+
+        try {
+            $arrangement = $this->arrangementService->createArrangement(
+                $request->validated(),
+                $provider->id
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم إنشاء الترتيب الجاهز بنجاح وهو قيد المراجعة حالياً.',
+                'data'    => new ArrangementResource($arrangement),
+            ], 201);
+        } catch (Exception $e) {
+            $knownCode = in_array($e->getCode(), [403, 422]) ? $e->getCode() : 500;
+
+            Log::error('ArrangementController@store failed', [
+                'provider_id' => $provider->id,
+                'error'       => $e->getMessage(),
+                'file'        => $e->getFile(),
+                'line'        => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => $knownCode === 500
+                    ? 'حدث خطأ أثناء إنشاء الترتيب. يرجى المحاولة لاحقاً.'
+                    : $e->getMessage(),
+            ], $knownCode);
+        }
+    }
+
+    /**
+     * GET /arrangements/{arrangementId}
+     * Retrieve full details for a single package listing.
+     */
+    public function show(string $arrangementId): JsonResponse
+    {
+        $arrangement = Listing::where('listing_type', 'package')
+            ->with([
+                'variants.packageItems.includedVariant.listing',
+                'variants.packageFreelancers.freelancer',
+                'images',
+                'category',
+                'district',
+            ])
+            ->find($arrangementId);
+
+        if (! $arrangement) {
+            return response()->json([
+                'success' => false,
+                'message' => 'الترتيب غير موجود.',
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data'    => new ArrangementResource($arrangement),
+        ]);
+    }
+
+    /**
+     * PUT /arrangements/{arrangementId}
+     * Update an existing package listing owned by the authenticated company.
+     */
+    public function update(string $arrangementId, ArrangementUpdateRequest $request): JsonResponse
+    {
+        $provider = $request->user()->providerProfile;
+
+        if (! $provider) {
+            return response()->json([
+                'success' => false,
+                'message' => 'ملف الشركة غير موجود.',
+            ], 403);
+        }
+
+        $arrangement = Listing::where('listing_type', 'package')
+            ->where('provider_id', $provider->id)
+            ->find($arrangementId);
+
+        if (! $arrangement) {
+            return response()->json([
+                'success' => false,
+                'message' => 'الترتيب غير موجود أو لا تملك صلاحية تعديله.',
+            ], 404);
+        }
+
+        try {
+            $updated = $this->arrangementService->updateArrangement(
+                $arrangement,
+                $request->validated(),
+                $provider->id
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم تحديث الترتيب بنجاح.',
+                'data'    => new ArrangementResource($updated),
+            ]);
+        } catch (Exception $e) {
+            $knownCode = in_array($e->getCode(), [403, 422]) ? $e->getCode() : 500;
+
+            Log::error('ArrangementController@update failed', [
+                'arrangement_id' => $arrangementId,
+                'provider_id'    => $provider->id,
+                'error'          => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => $knownCode === 500
+                    ? 'فشل تحديث الترتيب. يرجى المحاولة لاحقاً.'
+                    : $e->getMessage(),
+            ], $knownCode);
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────
+    // Picker helpers (for the front-end dropdown / search UI)
+    // ────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * GET /provider/my-products
+     */
+    public function getMyProducts(Request $request): JsonResponse
+    {
+        $provider = $request->user()->providerProfile;
+
+        if (! $provider) {
+            return response()->json(['success' => false, 'message' => 'ملف الشركة غير موجود.'], 403);
+        }
+
+        try {
+            return response()->json([
+                'success' => true,
+                'data'    => $this->arrangementService->getProviderProducts($provider->id),
+            ]);
+        } catch (Exception $e) {
+            Log::error('ArrangementController@getMyProducts failed', ['error' => $e->getMessage()]);
+
+            return response()->json(['success' => false, 'message' => 'فشل جلب المنتجات.'], 500);
+        }
+    }
+
+    /**
+     * GET /provider/my-services
+     */
+    public function getMyServices(Request $request): JsonResponse
+    {
+        $provider = $request->user()->providerProfile;
+
+        if (! $provider) {
+            return response()->json(['success' => false, 'message' => 'ملف الشركة غير موجود.'], 403);
+        }
+
+        try {
+            return response()->json([
+                'success' => true,
+                // 'data'    => $this->arrangementService->getProviderServices($provider->id),
+            ]);
+        } catch (Exception $e) {
+            Log::error('ArrangementController@getMyServices failed', ['error' => $e->getMessage()]);
+
+            return response()->json(['success' => false, 'message' => 'فشل جلب الخدمات.'], 500);
+        }
+    }
+
+    /**
+     * GET /provider/my-all-products
+     */
+    public function getMyAllProducts(Request $request): JsonResponse
+    {
+        $provider = $request->user()->providerProfile;
+
+        if (! $provider) {
+            return response()->json(['success' => false, 'message' => 'ملف الشركة غير موجود.'], 403);
+        }
+
+        try {
+            return response()->json([
+                'success' => true,
+                // 'data'    => $this->arrangementService->getProviderAllProducts($provider->id),
+            ]);
+        } catch (Exception $e) {
+            Log::error('ArrangementController@getMyAllProducts failed', ['error' => $e->getMessage()]);
+
+            return response()->json(['success' => false, 'message' => 'فشل جلب جميع البيانات.'], 500);
+        }
+    }
+
+    /**
+     * GET /provider/available-freelancers
+     */
+    public function getFreelancersList(Request $request): JsonResponse
+    {
+        $provider = $request->user()->providerProfile;
+
+        if (! $provider) {
+            return response()->json(['success' => false, 'message' => 'ملف الشركة غير موجود.'], 403);
+        }
+
+        try {
+            return response()->json([
+                'success' => true,
+                'data'    => $this->arrangementService->getAvailableFreelancers($provider->id),
+            ]);
+        } catch (Exception $e) {
+            Log::error('ArrangementController@getFreelancersList failed', ['error' => $e->getMessage()]);
+
+            return response()->json(['success' => false, 'message' => 'فشل جلب الفريلانسرز.'], 500);
+        }
+    }
+}
