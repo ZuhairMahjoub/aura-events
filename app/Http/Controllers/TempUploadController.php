@@ -6,6 +6,8 @@ use App\Models\Listing;
 use App\Services\MediaService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use  Illuminate\Support\Facades\Storage;
+use StreamBucket;
 
 class TempUploadController extends Controller
 {
@@ -20,7 +22,7 @@ class TempUploadController extends Controller
         return response()->json([
             'message' => 'Image uploaded successfully to temporary storage.',
             'temp_path' => $tempPath,
-            'url'       => asset($tempPath), // الرابط الكامل المباشر للصورة
+            'url'       => asset('storage/' . $tempPath)
         ], 201);
     }
      public function index(string $listingId): JsonResponse

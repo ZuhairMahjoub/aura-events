@@ -19,6 +19,7 @@ class ListingSlot extends Model
         'start_time',
         'end_time',
         'remaining_capacity',
+        
     ];
 
     protected function casts(): array

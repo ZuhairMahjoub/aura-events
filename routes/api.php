@@ -18,8 +18,8 @@ use App\Http\Controllers\DistrictsController;
 use App\Http\Controllers\JobOfferController;
 use App\Http\Controllers\TempUploadController;
 use App\Http\Controllers\AdminProviderController; 
-use App\Http\Controllers\Api\NotificationController;
-
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ProviderController;
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'store']); 
@@ -58,6 +58,7 @@ Route::middleware(['auth:sanctum', EnsureAccountIsVerified::class])->group(funct
     Route::post('/provider/complete-profile', [ProviderAuthController::class, 'store']);
     Route::get('/providers/{id}', [ProviderAuthController::class, 'showProvider']);});
 
+
 Route::middleware(['auth:sanctum'])->group(function () {
             Route::post('/uploads/temp', [TempUploadController::class, 'upload']);
             Route::get('listings/{listingId}/images', [TempUploadController::class, 'index']);
@@ -89,7 +90,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::get('/{arrangementId}', [ArrangementController::class, 'show']);
             Route::put('/{arrangementId}', [ArrangementController::class, 'update']);
             Route::get('my-products', [ArrangementController::class, 'getMyProducts']);
-    Route::get('my-services', [ArrangementController::class, 'getMyServices']);       // API جديد 
     Route::get('my-all-products', [ArrangementController::class, 'getMyAllProducts']); // API جديد
         });
 
@@ -132,4 +132,6 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
  
-  
+  Route::middleware(['auth:sanctum', 'approved_provider'])->group(function () {
+    Route::get('/provider/profile', [ProviderController::class, 'profile']);
+});

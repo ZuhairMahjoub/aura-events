@@ -31,22 +31,23 @@ class BookingController extends Controller
         ], 201);
     }
 
-    public function cancel(string $bookingId): JsonResponse
-    {
-        $booking = \App\Models\Booking::findOrFail($bookingId);
+public function cancel(Request $request,string $bookingId): JsonResponse
+{
+    // نتحقق من وجود الحجز والصلاحية أولاً (بدون lock — فقط للـ Authorization)
+    $booking = \App\Models\Booking::findOrFail($bookingId);
+    Gate::authorize('cancel', $booking);
 
-        // Authorization: هل المستخدم يملك هذا الحجز؟
-        Gate::authorize('cancel', $booking);
+    $cancelledBy = $request->user()->hasRole('provider') ? 'provider' : 'organizer';
 
-        $booking = $this->bookingService->cancel(
-            $booking,
-            'user',
-            request('reason')
-        );
+    $booking = $this->bookingService->cancel(
+        $bookingId,
+        $cancelledBy,
+        $request->input('reason')
+    );
 
-        return response()->json([
-            'message' => 'تم إلغاء الحجز.',
-            'data'    => $booking,
-        ]);
-    }
+    return response()->json([
+        'message' => 'تم إلغاء الحجز.',
+        'data'    => $booking,
+    ]);
+}
 }

@@ -83,6 +83,13 @@ class User extends Authenticatable implements AuthCanResetPassword
     /**
      * علاقة مستخدم بملف مقدم الخدمة.
      */
+    // داخل ملف app/Models/User.php
+
+public function provider()
+{
+    // المعامل الثاني هو اسم العمود الموجود في جدول providers والذي يربطه بالـ users
+    return $this->hasOne(Provider::class, 'user_id'); 
+}
    
     public function hasVerifiedPhone(): bool
     {

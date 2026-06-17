@@ -16,13 +16,25 @@ use HasUlids, HasFactory;
     protected $keyType = 'string';
     public $incrementing = false;
 
-    protected $fillable = [
-        'provider_id', 'category_id', 'district_id', 'title', 
-        'description', 'listing_type', 'material_composition', 
-        'secondary_contact_number', 'cancel_before_acceptance', 
-        'cancel_after_acceptance', 'cancel_before_payment', 
-        'is_provider_location_based', 'moderation_status', 'rejection_reason'
-    ];
+   protected $fillable = [
+    'provider_id',
+    'category_id',
+    'district_id',
+    'title',
+    'description',
+    'listing_type',
+    'moderation_status',
+    // ✨ تأكد من إضافة هذه الحقول هنا:
+    'cancel_before_acceptance',
+    'cancel_after_acceptance',
+    'cancel_before_payment',
+    
+    'material_composition',
+    'secondary_contact_number',
+    'is_provider_location_based',
+    'status',
+    'rejection_reason',
+];
 
     protected $casts = [
         'title' => 'array',

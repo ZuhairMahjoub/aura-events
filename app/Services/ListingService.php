@@ -236,55 +236,60 @@ class ListingService
 
         return $services;
     }
+private function bulkInsertAvailabilitiesAndSlots($variant, array $availabilitiesData): void
+{
+    DB::table('listing_availabilities')
+        ->where('listing_variant_id', $variant->id)
+        ->delete();
 
-    private function bulkInsertAvailabilitiesAndSlots($variant, array $availabilitiesData): void
-    {
-        // ملاحظة: تم الإبقاء على هذا الحذف لأنه يستخدم في سياق الـ Creation غالباً، 
-        // لكن تأكد من عدم استدعاء هذه الدالة أثناء الـ Update لتجنب كسر الحجوزات.
-        DB::table('listing_availabilities')
-            ->where('listing_variant_id', $variant->id)
-            ->delete();
+    $availabilitiesToInsert = [];
+    $slotsToInsert          = [];
 
-        $availabilitiesToInsert = [];
-        $slotsToInsert          = [];
+    foreach ($availabilitiesData as $availabilityData) {
+        $availabilityId = (string) Str::ulid();
+        $formattedDate = Carbon::parse($availabilityData['available_date'])->format('Y-m-d');
 
-        foreach ($availabilitiesData as $availabilityData) {
-            $availabilityId = (string) Str::ulid();
+        $availabilitiesToInsert[] = [
+            'id'                 => $availabilityId,
+            'listing_variant_id' => $variant->id,
+            'available_date'     => $formattedDate,
+            'is_blocked'         => $availabilityData['is_blocked'] ?? false,
+            'created_at'         => now(),
+            'updated_at'         => now(),
+        ];
 
-            // 🔥 الحل هنا: التأكد من توحيد التاريخ لتجنب أخطاء الإدخال المباشر
-            $formattedDate = Carbon::parse($availabilityData['available_date'])->format('Y-m-d');
+        foreach ($availabilityData['slots'] ?? [] as $slotData) {
+            // ✅ حل مشكلة الاسم: دعم slot_name أو name والتعامل مع المصفوفات المترجمة
+            $slotNameValue = $slotData['slot_name'] ?? $slotData['name'] ?? null;
+            $encodedSlotName = is_array($slotNameValue) 
+                ? json_encode($slotNameValue, JSON_UNESCAPED_UNICODE) 
+                : $slotNameValue;
 
-            $availabilitiesToInsert[] = [
-                'id'                 => $availabilityId,
-                'listing_variant_id' => $variant->id,
-                'available_date'     => $formattedDate,
-                'is_blocked'         => $availabilityData['is_blocked'] ?? false,
-                'created_at'         => now(),
-                'updated_at'         => now(),
+            // ✅ حل مشكلة الوقت: دمج تاريخ اليوم الفعلي المستهدف مع ساعات الشيفت
+            $startTime = Carbon::parse($formattedDate . ' ' . $slotData['start_time'])->toDateTimeString();
+            $endTime   = Carbon::parse($formattedDate . ' ' . $slotData['end_time'])->toDateTimeString();
+
+            $slotsToInsert[] = [
+                'id'                      => (string) Str::ulid(),
+                'listing_availability_id' => $availabilityId,
+                'slot_name'               => $encodedSlotName,
+                'start_time'              => $startTime,
+                'end_time'                => $endTime,
+                'remaining_capacity'      => $slotData['remaining_capacity'] ?? 1,
+                'created_at'              => now(),
+                'updated_at'              => now(),
             ];
-
-            foreach ($availabilityData['slots'] ?? [] as $slotData) {
-                $slotsToInsert[] = [
-                    'id'                      => (string) Str::ulid(),
-                    'listing_availability_id' => $availabilityId,
-                    'slot_name'               => isset($slotData['slot_name']) ? json_encode($slotData['slot_name'], JSON_UNESCAPED_UNICODE) : null,
-                    'start_time'              => $slotData['start_time'],
-                    'end_time'                => $slotData['end_time'],
-                    'remaining_capacity'      => $slotData['remaining_capacity'] ?? 1,
-                    'created_at'              => now(),
-                    'updated_at'              => now(),
-                ];
-            }
-        }
-
-        if (!empty($availabilitiesToInsert)) {
-            DB::table('listing_availabilities')->insert($availabilitiesToInsert);
-        }
-
-        if (!empty($slotsToInsert)) {
-            DB::table('listing_slots')->insert($slotsToInsert);
         }
     }
+
+    if (!empty($availabilitiesToInsert)) {
+        DB::table('listing_availabilities')->insert($availabilitiesToInsert);
+    }
+
+    if (!empty($slotsToInsert)) {
+        DB::table('listing_slots')->insert($slotsToInsert);
+    }
+}
 private function syncAvailabilities($variant, array $availabilitiesData): void
 {
     // 1. استخراج الـ IDs الموجودة في الطلب (التي سيتم الاحتفاظ بها)
@@ -334,50 +339,35 @@ private function syncAvailabilities($variant, array $availabilitiesData): void
         }
     }
 }
-
-
 private function syncSlots($availability, array $slotsData)
 {
-    // 1. تحديد الـ IDs الموجودة في الطلب
-    $sentSlotIds = collect($slotsData)
-        ->pluck('id')
-        ->filter()
-        ->toArray();
+    $sentSlotIds = collect($slotsData)->pluck('id')->filter()->toArray();
 
-    // 2. حذف الـ Slots التي لم تعد موجودة في الطلب
-    // إذا كنت تريد حذفها نهائياً من قاعدة البيانات (تجاوز softDeletes)، استخدم forceDelete()
     $availability->slots()
         ->whereNotIn('id', $sentSlotIds)
-        ->forceDelete(); 
+        ->forceDelete();
 
-    // 3. تحديث أو إنشاء الـ Slots
+    $formattedDate = Carbon::parse($availability->available_date)->format('Y-m-d');
+
     foreach ($slotsData as $slotData) {
+
+        // ✅ بدون ترميز يدوي — مرر القيمة كما هي (array أو string)
+        $slotNameValue = $slotData['slot_name'] ?? $slotData['name'] ?? null;
+
+        $startTime = Carbon::parse($formattedDate . ' ' . $slotData['start_time'])->toDateTimeString();
+        $endTime   = Carbon::parse($formattedDate . ' ' . $slotData['end_time'])->toDateTimeString();
+
         $availability->slots()->updateOrCreate(
             ['id' => $slotData['id'] ?? null],
             [
-                'slot_name' => $slotData['slot_name'] ?? null,
-                'start_time' => $slotData['start_time'],
-                'end_time' => $slotData['end_time'],
+                'slot_name'          => $slotNameValue,   // الـ cast يتولى الترميز
+                'start_time'         => $startTime,
+                'end_time'           => $endTime,
                 'remaining_capacity' => $slotData['remaining_capacity'] ?? 1,
             ]
         );
     }
 }
-    private function assertAvailabilitiesNotBooked(array $availabilityIds): void
-    {
-        if (empty($availabilityIds)) return;
-
-        $slotIds = DB::table('listing_slots')
-            ->whereIn('listing_availability_id', $availabilityIds)
-            // تم إزالة ->whereNull('deleted_at') من هنا لأن الجدول لم يعد يدعم الـ Soft Deletes
-            ->pluck('id')
-            ->toArray();
-
-        if (!empty($slotIds)) {
-            $this->assertSlotsNotBooked($slotIds);
-        }
-    }
-
     private function assertSlotsNotBooked(array $slotIds): void
     {
         // تم إزالة return; العشوائية التي كانت تعطل الدالة تماماً

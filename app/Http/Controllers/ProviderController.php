@@ -2,64 +2,78 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Provider;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 class ProviderController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function profile(Request $request): JsonResponse
     {
-        //
-    }
+        try {
+            $user = $request->user();
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
-    }
+            // حماية إضافية في حال استدعاء المسار بدون توكن
+            if (!$user) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'يجب تسجيل الدخول أولاً.'
+                ], 401);
+            }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
-    {
-        //
-    }
+            // التحقق من صلاحية دور المزود
+            if (!$user->hasRole('provider')) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'غير مصرح. هذه الخدمة للمزودين فقط.'
+                ], 403);
+            }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(Provider $provider)
-    {
-        //
-    }
+            // جلب السجل عبر العلاقة الجديدة والمضمونة
+            $provider = $user->providerProfile;
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Provider $provider)
-    {
-        //
-    }
+            if (!$provider) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'لم يتم إكمال بيانات البروفايل بعد.'
+                ], 404);
+            }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, Provider $provider)
-    {
-        //
-    }
+            return response()->json([
+                'status' => 'success',
+                'data'   => [
+                    // --- بيانات المزود (Providers Table) ---
+                    'provider_id'       => $provider->id,
+                    'brand_name'        => $provider->brand_name,
+                    'provider_type'     => $provider->provider_type,
+                    'moderation_status' => $provider->moderation_status,
+                    'is_verified'       => (bool) $provider->is_verified,
+                    'created_at'        => $provider->created_at,
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Provider $provider)
-    {
-        //
+                    // --- بيانات الحساب الأساسي (Users Table) ---
+                    'user' => [
+                        'id'                 => $user->id,
+                        'first_name'         => $user->first_name,
+                        'last_name'          => $user->last_name,
+                        'full_name'          => $user->first_name . ' ' . $user->last_name,
+                        'email'              => $user->email,
+                        'phone'              => $user->phone,
+                        'city_id'            => $user->city_id,
+                        'account_status'     => $user->status, // حالة حساب المستخدم
+                        'is_email_verified'  => !is_null($user->email_verified_at),
+                        'is_phone_verified'  => $user->hasVerifiedPhone(), // معتمدة على دالتك في الموديل
+                        'settings_language'  => $user->settings_language,
+                        'settings_theme'     => $user->settings_theme,
+                    ]
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Get Provider Profile Error: " . $e->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'حدث خطأ أثناء جلب البيانات، يرجى المحاولة لاحقاً.'
+            ], 500);
+        }
     }
 }

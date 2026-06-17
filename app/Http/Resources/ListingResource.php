@@ -4,6 +4,8 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+// 1. تأكد من استدعاء الفيساد في الأعلى
+use Illuminate\Support\Facades\Storage; 
 
 class ListingResource extends JsonResource
 {
@@ -24,25 +26,27 @@ class ListingResource extends JsonResource
             'is_provider_location_based' => (bool) $this->is_provider_location_based,
             'rejection_reason'           => $this->rejection_reason,
 
-            // ✨ تم التصحيح هنا: نستخدم العلاقة "category" مباشرة
             'category'                   => $this->relationLoaded('category') && $this->category
                 ? [
                     'id'   => $this->category->id,
-                    'name' => $this->category->name_en, // أو $this->category->name إذا كانت مصفوفة JSON للغات
+                    'name' => $this->category->name_en,
                 ]
                 : null,
 
-            // ✨ تم التصحيح هنا: نستخدم العلاقة "district" مباشرة
             'district'                   => $this->relationLoaded('district') && $this->district
                 ? [
                     'id'   => $this->district->id,
-                    'name' => $this->district->name_en, // أو $this->district->name إذا كانت مصفوفة JSON للغات
+                    'name' => $this->district->name_en,
                 ]
                 : null,
 
+            // ✨ تحديث الصور الأساسية هنا
             'images'                     => $this->relationLoaded('images') 
-                ? $this->images->map(fn($img) => ['url' => $img->url, 'alt' => $img->alt_text]) 
-                : [],
+                 ? $this->images->map(fn($img) => [
+        'url' => $img->url, // ✨ قمنا بإرجاعها بسيطة كما كانت، والموديل سيتولى الباقي تلقائياً!
+        'alt' => $img->alt_text
+    ])
+    : [],
 
             'variants'                   => $this->relationLoaded('variants') 
                 ? $this->variants->map(fn($variant) => [
@@ -54,9 +58,14 @@ class ListingResource extends JsonResource
                     'stock'      => $variant->stock_quantity,
                     'attributes' => $variant->dynamic_attributes,
                     
-                    'images'     => $variant->relationLoaded('images')
-                        ? $variant->images->map(fn($img) => ['url' => $img->url, 'alt' => $img->alt_text])
-                        : [],
+                    // ✨ تحديث صور الـ variants هنا
+                 'images' => $variant->relationLoaded('images')
+    ? $variant->images->map(fn($img) => [
+        'url' => $img->url, // ✨ قمنا بإرجاعها بسيطة كما كانت، والموديل سيتولى الباقي تلقائياً!
+        'alt' => $img->alt_text
+    ])
+    : [],
+                       
 
                     'availabilities' => $variant->relationLoaded('availabilities')
                         ? $variant->availabilities->map(fn($availability) => [

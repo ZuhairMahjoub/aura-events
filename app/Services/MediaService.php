@@ -5,36 +5,38 @@ namespace App\Services;
 use App\Models\Image;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\File\Exception\FileNotFoundException;
 
 class MediaService
 {
-    // المجلد النهائي للملفات الدائمة فقط
+    // استخدام القرص العام المربوط بالـ Symlink
+    private const DISK = 'public';
+
+    // المجلد النهائي للملفات الدائمة داخل قرص الـ storage
     private const BASE_DIR = 'uploads';
 
     /**
-     * الخطوة 1 — رفع مؤقت إلى public/temp/ مباشرة
+     * الخطوة 1 — رفع مؤقت إلى storage/app/public/temp/ مباشرة
      */
     public function storeTempUpload(UploadedFile $file): string
     {
         $filename = (string) Str::ulid() . '.' . $file->getClientOriginalExtension();
         
-        // تعديل المسار ليصبح في public/temp مباشرة
-        $tempDir  = public_path('temp');
+        // رفع الملف مباشرة باستخدام Facade التخزين إلى مجلد temp داخل القرص العام
+        $tempPath = $file->storeAs('temp', $filename, self::DISK);
 
-        if (! is_dir($tempDir)) {
-            mkdir($tempDir, 0755, true);
+        if (!$tempPath) {
+            throw new \RuntimeException("فشل رفع الملف المؤقت");
         }
 
-        $file->move($tempDir, $filename);
-
-        // إرجاع المسار المؤقت
-        return 'temp/' . $filename;
+        // إرجاع المسار المؤقت (مثل: temp/01KVA...)
+        return $tempPath;
     }
 
     /**
-     * الخطوة 2 — نقل الملف من public/temp/ إلى مجلده النهائي وربطه بالقاعدة
+     * الخطوة 2 — نقل الملف من المجلد المؤقت في الـ storage إلى مجلده النهائي وربطه بالقاعدة
      */
     public function moveAndAttach(
         string  $tempPath,
@@ -42,36 +44,31 @@ class MediaService
         string  $destinationDir,
         ?string $altText = null
     ): Image {
-        // المسار الفعلي للملف المؤقت في public/temp
-        $absTemp  = public_path('temp' . DIRECTORY_SEPARATOR . basename($tempPath));
         
-        // المسار النهائي في public/uploads/...
-        $finalDir = public_path(self::BASE_DIR . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, trim($destinationDir, '/')));
-        $filename = basename($absTemp);
-        $absFinal = $finalDir . DIRECTORY_SEPARATOR . $filename;
-
-        // المسار الذي سيُخزن في قاعدة البيانات للملف النهائي
-        $storedPath = self::BASE_DIR . '/' . trim($destinationDir, '/') . '/' . $filename;
-
-        if (! file_exists($absTemp)) {
-            throw new FileNotFoundException("الملف المؤقت غير موجود في: {$absTemp}");
+        // التحقق من وجود الملف المؤقت داخل القرص
+        if (!Storage::disk(self::DISK)->exists($tempPath)) {
+            throw new FileNotFoundException("الملف المؤقت غير موجود في القرص: {$tempPath}");
         }
 
-        if (! is_dir($finalDir)) {
-            mkdir($finalDir, 0755, true);
+        $filename = basename($tempPath);
+        
+        // المسار النهائي الموحد داخل القرص الدائم
+        $finalPath = self::BASE_DIR . '/' . trim($destinationDir, '/') . '/' . $filename;
+
+        // نقل الملف بأمان عبر نظام الـ Storage التابع للارفيل
+        if (!Storage::disk(self::DISK)->move($tempPath, $finalPath)) {
+            throw new \RuntimeException("فشل نقل الملف إلى: {$finalPath}");
         }
 
-        if (! rename($absTemp, $absFinal)) {
-            throw new \RuntimeException("فشل نقل الملف إلى: {$absFinal}");
-        }
-
+        // تخزين المسار الجديد في قاعدة البيانات
         return $model->images()->create([
-            'path'     => $storedPath,
+            'path'     => $finalPath,
             'alt_text' => $altText ?? 'Media image',
         ]);
     }
+
     /**
-     * حذف صورة نهائياً من المجلد العام (public) ومن قاعدة البيانات.
+     * حذف صورة نهائياً من قرص التخزين ومن قاعدة البيانات.
      */
     public function deleteImage(Image $image): bool
     {
@@ -79,16 +76,12 @@ class MediaService
             return $image->delete();
         }
 
-        // بما أن المسار مخزن في القاعدة كـ "uploads/arrangements/..."
-        // نقوم بتحويل السلاشات لتناسب بيئة Windows وتحديد المسار المطلق
-        $absPath = public_path(str_replace('/', DIRECTORY_SEPARATOR, $image->path));
-
-        // التحقق من وجود الملف فعلياً على القرص قبل محاولة حذفه
-        if (file_exists($absPath)) {
-            @unlink($absPath); // الـ @ تمنع انهيار النظام لو كان الملف قيد الاستخدام أو مقفلاً من السيرفر
+        // التحقق من وجود الملف في القرص وحذفه فيزيائياً
+        if (Storage::disk(self::DISK)->exists($image->path)) {
+            Storage::disk(self::DISK)->delete($image->path);
         }
 
-        // حذف السجل من قاعدة البيانات (يدعم Soft Delete لو كان مفعلاً في الموديل)
+        // حذف السجل من قاعدة البيانات
         return $image->delete();
     }
 }

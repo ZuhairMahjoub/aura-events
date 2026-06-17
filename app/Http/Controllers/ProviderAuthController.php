@@ -65,6 +65,11 @@ class ProviderAuthController extends Controller
         ], 500);
     }
 }
+
+
+
+
+
 public function showProvider(string $id): JsonResponse
 {
     try {

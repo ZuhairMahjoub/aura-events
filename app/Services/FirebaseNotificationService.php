@@ -11,12 +11,13 @@ use Kreait\Firebase\Messaging\Notification;
 
 class FirebaseNotificationService
 {
-    protected Messaging $messaging;
 
-    public function __construct(Messaging $messaging)
-    {
-        $this->messaging = $messaging;
-    }
+protected ?Messaging $messaging = null;
+
+public function __construct()
+{
+    // lazy load
+}
 
     public function sendToUser(string $userId, string $title, string $body, array $data = []): array
     {

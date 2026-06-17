@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Laravel\Socialite\Facades\Socialite; 
 use App\Models\User;
 use App\Models\DeviceToken;
+use App\Models\Provider;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Auth;
 use Exception;
@@ -144,6 +145,20 @@ public function getFilteredUsers(\Illuminate\Http\Request $request): \Illuminate
             'debug'   => config('app.debug') ? $e->getMessage() : null
         ], 500);
     }
+}
+public function profile()
+{
+    $provider = Provider::with([
+        'user',
+        'companyDetail.district'
+    ])
+    ->where('user_id', auth()->id)
+    ->firstOrFail();
+
+    return response()->json([
+        'success' => true,
+        'data' => $provider
+    ]);
 }
 
     public function store(Request $request)
@@ -385,7 +400,6 @@ public function getFilteredUsers(\Illuminate\Http\Request $request): \Illuminate
         $cleanIdentity = !$isEmail ? $this->otpService->formatPhone($identity) : $identity;
 
         $isValid = $this->otpService->verifyOtp($cleanIdentity, $otpCode);
-
         if (!$isValid) {
             return response()->json([
                 'status'  => 'error',

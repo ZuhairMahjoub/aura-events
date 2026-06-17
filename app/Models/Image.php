@@ -1,17 +1,16 @@
 <?php
-
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Concerns\HasUlids;
+use Illuminate\Database\Eloquent\Concerns\HasUlids; // 👈 تأكد من استدعاء هذا
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Casts\Attribute;
-
+use Illuminate\Support\Facades\Storage;
 class Image extends Model
 {
-    use HasUlids;
+    use HasUlids; // 👈 تفعيل الـ ULID تلقائياً
 
-    public $timestamps = false;
+    public $timestamps = false; // لأن جدولك لا يحتوي على timestamps
 
     protected $fillable = ['path', 'alt_text'];
 
@@ -19,17 +18,10 @@ class Image extends Model
     {
         return $this->morphTo();
     }
-
-    /**
-     * الـ path في DB مخزَّن كـ "uploads/arrangements/.../photo.jpg"
-     * url() يحوله لـ "http://127.0.0.1:8000/uploads/arrangements/.../photo.jpg"
-     * بدون الحاجة لـ symlink أو Storage facade
-     */
     protected function url(): Attribute
-    {
-        return Attribute::make(
-            get: fn () => $this->path ? url($this->path) : null,
-        );
-    }
- 
+{
+    return Attribute::make(
+        get: fn () => $this->path ? Storage::url($this->path) : null,
+    );
+}
 }

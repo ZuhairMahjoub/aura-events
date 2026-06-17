@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Listeners;
+namespace App\Http\Controllers\Auth;
 
 use App\Events\UserRegistered;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\VerifyEmailOtpMail; // سنقوم بإنشائه في الخطوة التالية
 
-class SendEmailVerification implements ShouldQueue
+class VerifyEmailController implements ShouldQueue
 {
     use InteractsWithQueue;
 

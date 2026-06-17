@@ -47,7 +47,10 @@ public function activeContracts()
     {
         return $this->hasOne(CompanyDetail::class);
     }
-
+public function getProfileAttribute()
+{
+    return $this->companyDetails ?? $this->freelancerDetails;
+}
     public function freelancerDetails(): HasOne
     {
         return $this->hasOne(FreelancerDetail::class);

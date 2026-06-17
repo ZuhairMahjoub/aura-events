@@ -90,28 +90,33 @@ class BookingService
     /**
      * إلغاء حجز مع استعادة الطاقة الاستيعابية.
      */
-    public function cancel(Booking $booking, string $cancelledBy, ?string $reason = null): Booking
-    {
-        return DB::transaction(function () use ($booking, $cancelledBy, $reason) {
+/**
+ * إلغاء حجز مع استعادة الطاقة الاستيعابية.
+ * يستقبل ID وليس Model جاهز، لضمان قراءة طازجة مع lockForUpdate.
+ */
+public function cancel(string $bookingId, string $cancelledBy, ?string $reason = null): Booking
+{
+    return DB::transaction(function () use ($bookingId, $cancelledBy, $reason) {
 
-            // التحقق من إمكانية الإلغاء بناءً على سياسة الـ Listing
-            $this->assertCanBeCancelled($booking, $cancelledBy);
+        // قفل السجل لمنع أي تعديل متزامن (مثل: accept في نفس اللحظة)
+        $booking = Booking::lockForUpdate()->findOrFail($bookingId);
 
-            // استعادة الطاقة الاستيعابية
-            $this->releaseCapacity($booking);
+        $this->assertCanBeCancelled($booking, $cancelledBy);
 
-            $booking->update([
-                'status'               => 'cancelled',
-                'cancelled_at'         => now(),
-                'cancelled_by'         => $cancelledBy,
-                'cancellation_reason'  => $reason,
-            ]);
+        $this->releaseCapacity($booking);
 
-            DB::afterCommit(fn() => event(new BookingCancelled($booking)));
+        $booking->update([
+            'status'               => 'cancelled',
+            'cancelled_at'         => now(),
+            'cancelled_by'         => $cancelledBy,
+            'cancellation_reason'  => $reason,
+        ]);
 
-            return $booking->fresh();
-        });
-    }
+        DB::afterCommit(fn() => event(new \App\Events\BookingCancelled($booking)));
+
+        return $booking->fresh();
+    });
+}
 
     // ── Private Helpers ──────────────────────────────────────────────────────
 
@@ -159,12 +164,53 @@ class BookingService
         }
     }
 
-    private function assertCanBeCancelled(Booking $booking, string $cancelledBy): void
-    {
-        $nonCancellableStatuses = ['completed', 'cancelled'];
-        if (in_array($booking->status, $nonCancellableStatuses)) {
-            throw new \DomainException("لا يمكن إلغاء حجز بحالة: [{$booking->status}]");
-        }
-        // يمكن إضافة منطق سياسة الإلغاء من الـ Listing هنا
+    /**
+ * يتحقق من إمكانية إلغاء الحجز بناءً على حالته الحالية وسياسات الـ Listing.
+ *
+ * @throws \DomainException إذا كانت السياسة تمنع الإلغاء
+ */
+private function assertCanBeCancelled(Booking $booking, string $cancelledBy): void
+{
+    // 1. الحالات الثابتة التي لا يمكن إلغاؤها تحت أي ظرف
+    // أضفنا 'rejected' لأن الحجز المرفوض انتهت دورة حياته فعلياً
+    $nonCancellableStatuses = ['completed', 'cancelled', 'rejected'];
+
+    if (in_array($booking->status, $nonCancellableStatuses)) {
+        throw new \DomainException(
+            "لا يمكن إلغاء حجز بحالة: [{$booking->status}]"
+        );
     }
+
+    // 2. المزود والإدارة يتجاوزون كل السياسات أدناه (حق إلغاء/رفض دائم)
+    if ($cancelledBy !== 'organizer') {
+        return;
+    }
+
+    // 3. تأمين تحميل علاقة الـ Listing لقراءة شروط الإلغاء الخاصة به
+    $booking->loadMissing('listing');
+    $listing = $booking->listing;
+
+    // 4. فحص الإلغاء قبل قبول الطلب (Pending)
+    if ($booking->status === 'pending' && !$listing->cancel_before_acceptance) {
+        throw new \DomainException(
+            "سياسة هذا الإعلان لا تسمح للعميل بإلغاء الطلب وهو في مرحلة الانتظار."
+        );
+    }
+
+    // 5. فحص الإلغاء بعد قبول الطلب (Accepted / Confirmed)
+    if (in_array($booking->status, ['accepted', 'confirmed']) && !$listing->cancel_after_acceptance) {
+        throw new \DomainException(
+            "عذراً، لا يمكن إلغاء الحجز بعد موافقة مزود الخدمة بناءً على سياسة الإعلان."
+        );
+    }
+
+    // 6. فحص حالة الدفع — يقفل الإلغاء بعد الدفع إذا كانت السياسة تفرض ذلك
+    // ملاحظة: اسم الحقل cancel_before_payment يعني "نافذة الإلغاء تنتهي عند الدفع"
+    // وهو معكوس دلالياً عن الحقلين أعلاه — راجع التعليق أسفل الكلاس لمعرفة السبب
+    if ($booking->payment_status === 'paid' && $listing->cancel_before_payment) {
+        throw new \DomainException(
+            "لا يمكن إلغاء الحجز بعد إتمام عملية الدفع بناءً على شروط الإعلان."
+        );
+    }
+}
 }
