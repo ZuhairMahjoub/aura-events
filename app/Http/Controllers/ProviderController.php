@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Provider;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+
 
 class ProviderController extends Controller
 {
@@ -76,4 +78,19 @@ class ProviderController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Display a listing of the resource.
+     */
+    public function index()
+    {
+   
+    // جلب جميع المزودين مع بيانات المستخدم المرتبطة بهم
+    $providers = Provider::with('user')->get();
+    
+    return response()->json([
+        'success' => true,
+        'data' => $providers
+    ], 200);
+}
 }

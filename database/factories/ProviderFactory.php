@@ -8,19 +8,27 @@ use Illuminate\Support\Str;
 class ProviderFactory extends Factory
 {
     protected $model = Provider::class;
+public function definition(): array
+{
+    return [
+        'id'            => (string) Str::ulid(),
+        'brand_name'    => $this->faker->company,
+        'provider_type' => $this->faker->randomElement(['company', 'freelancer']),
+        'rating'        => 0.00,
+        'is_verified'   => false,
+        'is_active'     => true,
+        'moderation_status' => 'pending',   // ✅ أضف هذا
+    ];
+}
 
-    public function definition(): array
-    {
-        return [
-            'id' => (string) Str::ulid(),
-            // ملاحظة: الـ user_id سيتم تمريره من الـ Seeder عند الإنشاء
-            'brand_name' => $this->faker->company,
-            'provider_type' => $this->faker->randomElement(['company', 'freelancer']),
-            'rating' => 0.00,
-            'is_verified' => false, // الافتراضي غير معتمد
-            'is_active' => true,
-        ];
-    }
+public function approved(): static
+{
+    return $this->state(fn (array $attributes) => [
+        'is_verified'       => true,
+        'moderation_status' => 'approved',  // ✅ أضف هذا
+        'rating'            => $this->faker->randomFloat(2, 3, 5),
+    ]);
+}
 public function company(): static
 {
     return $this->state(fn (array $attributes) => [
@@ -34,12 +42,5 @@ public function freelancer(): static
         'provider_type' => 'freelancer',
     ]);
 }
-    // state لإنشاء مزود خدمة معتمد (Approved)
-    public function approved(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'is_verified' => true,
-            'rating' => $this->faker->randomFloat(2, 3, 5), // إعطاء تقييم عشوائي بين 3 و 5 للمعتمدين
-        ]);
-    }
+ 
 }

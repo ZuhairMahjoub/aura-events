@@ -59,17 +59,19 @@ class AdminProviderController extends Controller
     }
 
     public function showProvider(string $id): JsonResponse
-    {
-        $provider = $this->providerService->findProviderById($id)
-            ->with(['user', 'categories', 'freelancerDetails', 'companyDetails'])
-            ->firstOrFail();
+{
+    $provider = Provider::with([
+        'user',
+        'categories',
+        'freelancerDetails',
+        'companyDetails.district',
+    ])->findOrFail($id);
 
-        return response()->json([
-            'status' => 'success',
-            'data'   => new ProviderResource($provider) // كل المنطق داخل هذا الـ Resource
-        ]);
-    }
-
+    return response()->json([
+        'status' => 'success',
+        'data'   => new ProviderResource($provider),
+    ]);
+}
 
   public function getUserDetails(string $id): JsonResponse
 {

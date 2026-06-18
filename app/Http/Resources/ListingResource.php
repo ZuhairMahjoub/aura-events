@@ -39,6 +39,12 @@ class ListingResource extends JsonResource
                     'name' => $this->district->name_en,
                 ]
                 : null,
+               'company' => $this->relationLoaded('provider') && $this->provider
+                ? [
+                    'id'   => $this->provider->id,
+                    // قم بتغيير 'company_name' إلى اسم العمود الفعلي في جدول المستخدمين
+'name' => trim($this->provider->user->first_name . ' ' . $this->provider->user->last_name),                ]
+                : null,
 
             // ✨ تحديث الصور الأساسية هنا
             'images'                     => $this->relationLoaded('images') 

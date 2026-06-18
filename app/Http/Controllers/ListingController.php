@@ -66,22 +66,18 @@ public function getCompanyInventory(Request $request): JsonResponse
         ], Response::HTTP_OK);
     }
   
-    public function index(): JsonResponse
-    {
-        Gate::authorize('viewAny', Listing::class);
+   public function index(): JsonResponse
+{
+    Gate::authorize('viewAny', Listing::class);
 
-        $listings = $this->listingService->getAllListings();
+    $listings = $this->listingService->getAllListings();
 
-        return response()->json([
-            'success' => true,
-            'data'    => ListingResource::collection($listings),
-            'meta'    => [
-                'current_page' => $listings->currentPage(),
-                'last_page'    => $listings->lastPage(),
-                'total'        => $listings->total()
-            ]
-        ], Response::HTTP_OK);
-    }
+    // إضافة 'success' => true كبيانات إضافية مع الـ Resource
+    return ListingResource::collection($listings)
+        ->additional(['success' => true])
+        ->response()
+        ->setStatusCode(Response::HTTP_OK);
+}
 
   
     public function store(StoreListingRequest $request): JsonResponse

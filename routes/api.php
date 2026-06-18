@@ -143,4 +143,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
 Route::middleware(['auth:sanctum', 'approved_provider'])->group(function () {
     Route::get('/provider/profile', [ProviderController::class, 'profile']);
+    
+    Route::get('/admin/providers', [ProviderController::class, 'index']);
 });

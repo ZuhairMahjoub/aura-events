@@ -28,6 +28,7 @@ class ListingService
             'variants.images',
             'images',
             'category',
+            'provider',
             'district'
         ])
             ->latest()
