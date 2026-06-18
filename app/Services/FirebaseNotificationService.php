@@ -11,13 +11,8 @@ use Kreait\Firebase\Messaging\Notification;
 
 class FirebaseNotificationService
 {
-
-protected ?Messaging $messaging = null;
-
-public function __construct()
-{
-    // lazy load
-}
+    public function __construct(
+    ) {}
 
     public function sendToUser(string $userId, string $title, string $body, array $data = []): array
     {
@@ -25,10 +20,11 @@ public function __construct()
             $tokens = DeviceToken::where('user_id', $userId)->pluck('device_token')->toArray();
 
             if (empty($tokens)) {
-                return ['success' => false, 'message' => 'No tokens found.'];
+                return ['success' => false, 'message' => 'لم يتم العثور على رموز الأجهزة.'];
             }
 
-            $dbNotification = ModelsNotification::create([
+            // حفظ الإشعار في قاعدة البيانات
+            ModelsNotification::create([
                 'user_id' => $userId,
                 'title'   => $title,
                 'body'    => $body,
@@ -36,9 +32,13 @@ public function __construct()
                 'is_read' => false
             ]);
 
+            // التأكد من أن قيم البيانات هي نصوص (لأن Firebase لا يقبل غير النصوص)
+            $formattedData = array_map(fn($item) => is_array($item) ? json_encode($item, JSON_UNESCAPED_UNICODE) : (string)$item, $data);
+
+            // إنشاء رسالة الإشعار
             $message = CloudMessage::new()
                 ->withNotification(Notification::create($title, $body))
-                ->withData(array_map('strval', $data));
+                ->withData($formattedData);
 
             $report = $this->messaging->sendMulticast($message, $tokens);
 
@@ -54,25 +54,21 @@ public function __construct()
 
         } catch (\Exception $e) {
             Log::error("Firebase Error: " . $e->getMessage());
-            return ['success' => false, 'message' => 'Error: ' . $e->getMessage()];
+            return ['success' => false, 'message' => 'حدث خطأ: ' . $e->getMessage()];
         }
     }
 
-   
     protected function handleInvalidTokens($failures): void
     {
-        if (!is_iterable($failures)) {
-            return;
-        }
-
         $invalidTokens = [];
         foreach ($failures as $failure) {
-            $invalidTokens[] = $failure->target()->value();
+            if ($failure->error()->isInvalidRegistrationToken()) {
+                $invalidTokens[] = $failure->target()->value();
+            }
         }
 
         if (!empty($invalidTokens)) {
             DeviceToken::whereIn('device_token', $invalidTokens)->delete();
-            Log::info("Firebase: Cleaned up " . count($invalidTokens) . " tokens.");
         }
     }
 }

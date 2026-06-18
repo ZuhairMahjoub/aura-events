@@ -158,4 +158,50 @@ public function getCompanyInventory(Request $request): JsonResponse
             'data' => $listing
         ]);
     }
+    /**
+ * GET /provider/my-services
+ * جلب الخدمات والصـالات الخاصة بالشركة الحالية فقط
+ */
+public function getCompanyServices(Request $request): JsonResponse
+{
+    // جلب ملف المزود والتحقق منه بنفس أسلوبك المعتمد
+    $provider = $request->user()->providerProfile;
+
+    if (!$provider) {
+        return response()->json([
+            'success' => false,
+            'message' => 'ملف الشركة غير موجود.',
+        ], 403);
+    }
+
+    try {
+        // فحص نوع الـ listing_type ليكون 'service' فقط وتصفية النتائج حسب الشركة
+        $services = Listing::where('provider_id', $provider->id)
+            ->where('listing_type', 'service') 
+            ->with(['images', 'category', 'district', 'variants']) // تحميل العلاقات المعتمدة للخدمات
+            ->latest()
+            ->paginate($request->query('per_page', 15));
+
+        return response()->json([
+            'success' => true,
+            'meta'    => [
+                'current_page' => $services->currentPage(),
+                'last_page'    => $services->lastPage(),
+                'total'        => $services->total()
+            ],
+            'data'    => ListingResource::collection($services),
+        ], Response::HTTP_OK);
+
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('ListingController@getCompanyServices failed', [
+            'provider_id' => $provider->id,
+            'error'       => $e->getMessage()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'حدث خطأ أثناء جلب الخدمات الخاصة بشركتكم.',
+        ], 500);
+    }
+}
 }

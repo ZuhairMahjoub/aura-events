@@ -2,16 +2,29 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\UserRegistered;
 use App\Http\Controllers\Controller;
 use App\Models\Provider;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use App\Http\Resources\ProviderResource;
+use App\Http\Resources\UserResource;
+use App\Services\ProviderService;
+use App\Models\User;
 
 class AdminProviderController extends Controller
 {
+    protected $providerService;
+
+    public function __construct(ProviderService $providerService)
+    {
+        $this->providerService = $providerService;
+    }
+
     public function approve($id)
     {
         $provider = Provider::findOrFail($id);
-        
+
         $provider->update([
             'moderation_status' => 'approved',
             'is_active' => true
@@ -31,7 +44,7 @@ class AdminProviderController extends Controller
         ]);
 
         $provider = Provider::findOrFail($id);
-        
+
         $provider->update([
             'moderation_status' => 'rejected',
             'is_active' => false,
@@ -44,4 +57,31 @@ class AdminProviderController extends Controller
             'data' => $provider
         ], 200);
     }
+
+    public function showProvider(string $id): JsonResponse
+    {
+        $provider = $this->providerService->findProviderById($id)
+            ->with(['user', 'categories', 'freelancerDetails', 'companyDetails'])
+            ->firstOrFail();
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => new ProviderResource($provider) // كل المنطق داخل هذا الـ Resource
+        ]);
+    }
+
+
+  public function getUserDetails(string $id): JsonResponse
+{
+    try {
+        $user = User::findOrFail($id);
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => new UserResource($user)
+        ]);
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        return response()->json(['message' => 'المستخدم غير موجود'], 404);
+    }
+}
 }

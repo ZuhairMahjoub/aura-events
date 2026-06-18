@@ -19,6 +19,7 @@ use App\Http\Controllers\JobOfferController;
 use App\Http\Controllers\TempUploadController;
 use App\Http\Controllers\AdminProviderController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\OrganizerController;
 use App\Http\Controllers\ProviderController;
 
 Route::prefix('auth')->group(function () {
@@ -58,7 +59,6 @@ Route::get('/districts', [DistrictsController::class, 'index']);
 
 Route::middleware(['auth:sanctum', EnsureAccountIsVerified::class])->group(function () {
     Route::post('/provider/complete-profile', [ProviderAuthController::class, 'store']);
-    Route::get('/providers/{id}', [ProviderAuthController::class, 'showProvider']);
 });
 
 
@@ -71,6 +71,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         Route::get('/', [ListingController::class, 'index'])->middleware('permission:view listings');
         Route::get('/{listing}', [ListingController::class, 'show'])->middleware('permission:view listings');
+        Route::get('/provider/my-services', [ListingController::class, 'getCompanyServices']);
 
         Route::middleware(['approved_provider'])->group(function () {
             Route::post('/', [ListingController::class, 'store'])->middleware('permission:create listings');
@@ -93,7 +94,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::get('/{arrangementId}', [ArrangementController::class, 'show']);
             Route::put('/{arrangementId}', [ArrangementController::class, 'update']);
             Route::get('my-products', [ArrangementController::class, 'getMyProducts']);
-            Route::get('my-all-products', [ArrangementController::class, 'getMyAllProducts']); // API جديد
+            Route::get('my-all-products', [ArrangementController::class, 'getMyAllProducts']);
+            Route::get('/provider/my-arrangements', [ArrangementController::class, 'getMyPackages']); // API جديد
         });
 
         Route::get('/provider/my-products', [ArrangementController::class, 'getMyProducts']);
@@ -123,6 +125,10 @@ Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function
     Route::put('/providers/{id}/reject', [AdminProviderController::class, 'reject']);
     Route::put('/listings/{id}/approve', [AdminListingController::class, 'approve']);
     Route::put('/listings/{id}/reject', [AdminListingController::class, 'reject']);
+    Route::get('/providers/{id}', [AdminProviderController::class, 'showProvider']);
+    Route::get('/Organzier/{id}', [AdminProviderController::class, 'getUserDetails']);
+    
+
 });
 Route::middleware('auth:sanctum')->group(function () {
 
