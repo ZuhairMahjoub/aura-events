@@ -2,7 +2,10 @@
 
 namespace Database\Factories;
 
+use App\Models\Category;
+use App\Models\District;
 use App\Models\Listing;
+use App\Models\Provider;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -12,42 +15,76 @@ class ListingFactory extends Factory
 
     public function definition(): array
     {
-        return [
-            // توليد معرف فريد من نوع ULID متناسق مع بقية الجداول
-            'id' => (string) Str::ulid(),
-            
-            // يتم تمريره ديناميكياً من الـ Seeder لربطه بالمزود الصحيح
-            'provider_id' => null, 
+        $type = $this->faker->randomElement([
+            'package',
+            'service',
+            'physical_product',
+        ]);
 
-            // دعم الحقول المترجمة (بفرض أن الـ Casts في الموديل مجهزة كـ array أو json)
+        return [
+            'id' => (string) Str::ulid(),
+
+            'provider_id' => Provider::factory()->approved(),
+
+            'category_id' => Category::query()->inRandomOrder()->value('id') ?? 1,
+            'district_id' => District::query()->inRandomOrder()->value('id') ?? 1,
+
             'title' => [
                 'en' => $this->faker->words(3, true) . ' Premium Service',
                 'ar' => 'خدمة ' . $this->faker->word . ' المميزة والاحترافية',
             ],
+
             'description' => [
                 'en' => $this->faker->paragraph(2),
                 'ar' => 'وصف تفصيلي شامل ومميز مخصص لتغطية كافة متطلبات تنظيم الحفل أو الفعالية الخاصة بك.',
             ],
 
-            // النوع الافتراضي (سيقوم الـ Seeder بتعديله صراحة في حلقة الـ foreach)
-            'listing_type' => $this->faker->randomElement(['package', 'service', 'physical_product']),
-            
-            // أرقام عشوائية لمعرفات التصنيفات والمناطق (تأكد من وجود Seeders لها أو استبدلها بـ العلاقات)
-            'category_id' => $this->faker->numberBetween(1, 5), 
-            'district_id' => $this->faker->numberBetween(1, 10),
-            
-            'material_composition' => null, // مخصص للمنتجات المادية فقط إذا لزم الأمر
+            'listing_type' => $type,
+            'material_composition' => $type === 'physical_product'
+                ? $this->faker->words(3, true)
+                : null,
+
             'secondary_contact_number' => '09' . $this->faker->numerify('########'),
 
-            // سياسات الإلغاء التي تفحصها الـ BookingService
-            'cancel_before_acceptance' => $this->faker->boolean(80), // احتمال 80% أن يسمح بالإلغاء قبل القبول
-            'cancel_after_acceptance' => $this->faker->boolean(30),  // احتمال 30% أن يسمح بالإلغاء بعد القبول
-            'cancel_before_payment' => $this->faker->boolean(50),   // تنتهي نافذة الإلغاء فور الدفع
+            'cancel_before_acceptance' => $this->faker->boolean(80),
+            'cancel_after_acceptance' => $this->faker->boolean(30),
+            'cancel_before_payment' => $this->faker->boolean(50),
+            'is_provider_location_based' => $type !== 'service',
 
-            // يتم ضبطها تلقائياً للقاعات داخل الـ Seeder
-            'is_provider_location_based' => false, 
-            // 'moderation_status' => 'pending_approval', // الإعلانات تظهر معتمدة فوراً للاختبار السلس
-            // 'images' => [], // مصفوفة فارغة للصور في مرحلة الـ Seeding الحالية
+            'moderation_status' => 'approved',
+            'rejection_reason' => null,
         ];
+    }
+
+    public function approved(): static
+    {
+        return $this->state(fn () => [
+            'moderation_status' => 'approved',
+        ]);
+    }
+
+    public function physicalProduct(): static
+    {
+        return $this->state(fn () => [
+            'listing_type' => 'physical_product',
+            'material_composition' => $this->faker->words(3, true),
+        ]);
+    }
+
+    public function service(): static
+    {
+        return $this->state(fn () => [
+            'listing_type' => 'service',
+            'material_composition' => null,
+            'is_provider_location_based' => false,
+        ]);
+    }
+
+    public function package(): static
+    {
+        return $this->state(fn () => [
+            'listing_type' => 'package',
+            'material_composition' => null,
+        ]);
     }
 }

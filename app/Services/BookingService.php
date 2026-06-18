@@ -3,6 +3,7 @@ namespace App\Services;
 
 use App\Contracts\BookingStrategyInterface;
 use App\DTOs\BookingData;
+use App\Events\BookingAccepted;
 use App\Models\Booking;
 use App\Models\Listing;
 use App\Services\Booking\BookingStrategyFactory;
@@ -212,5 +213,52 @@ private function assertCanBeCancelled(Booking $booking, string $cancelledBy): vo
             "لا يمكن إلغاء الحجز بعد إتمام عملية الدفع بناءً على شروط الإعلان."
         );
     }
+}
+/**
+ * إرجاع قائمة حجوزات المستخدم الحالي (Customer) مع دعم الفلترة بالحالة والـ Pagination.
+ */
+public function getUserBookings(string $userId, array $filters = [], int $perPage = 15)
+{
+    return Booking::query()
+        ->where('user_id', $userId)
+        ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
+        ->when($filters['booking_type'] ?? null, fn ($q, $type) => $q->where('booking_type', $type))
+        ->with([
+            'listing:id,title,listing_type',
+            'variant:id,variant_name,price,currency',
+            'slot:id,slot_name,start_time,end_time',
+            'provider:id,brand_name',
+        ])
+        ->latest()
+        ->paginate($perPage);
+}
+/**
+ * يقبل المزود الحجز المعلّق (pending → accepted).
+ * لا يغيّر أي طاقة استيعابية — الطاقة محجوزة أصلاً منذ لحظة إنشاء الحجز.
+ */
+public function accept(string $bookingId, string $providerId): Booking
+{
+    return DB::transaction(function () use ($bookingId, $providerId) {
+
+        $booking = Booking::lockForUpdate()->findOrFail($bookingId);
+
+        // تحقق الملكية: هذا الحجز يخص هذا المزود فقط
+        if ($booking->provider_id !== $providerId) {
+            throw new \DomainException('لا تملك صلاحية التعامل مع هذا الحجز.');
+        }
+
+        // تحقق الانتقال: يمكن القبول فقط من حالة pending
+        if ($booking->status !== 'pending') {
+            throw new \DomainException(
+                "لا يمكن قبول حجز بحالة [{$booking->status}]، يجب أن يكون [pending]."
+            );
+        }
+
+        $booking->update(['status' => 'accepted']);
+
+        DB::afterCommit(fn() => event(new BookingAccepted($booking)));
+
+        return $booking->fresh();
+    });
 }
 }

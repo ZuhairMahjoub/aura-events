@@ -5,10 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Booking extends Model
 {
-    use HasUlids, SoftDeletes;
+    use HasUlids, SoftDeletes, HasFactory;
 
     // أضف هذه المصفوفة إلى الموديل
     protected $fillable = [

@@ -31,22 +31,53 @@ class BookingController extends Controller
         ], 201);
     }
 
-public function cancel(Request $request,string $bookingId): JsonResponse
+    public function cancel(Request $request, string $bookingId): JsonResponse
+    {
+        // نتحقق من وجود الحجز والصلاحية أولاً (بدون lock — فقط للـ Authorization)
+        $booking = \App\Models\Booking::findOrFail($bookingId);
+        Gate::authorize('cancel', $booking);
+
+        $cancelledBy = $request->user()->hasRole('provider') ? 'provider' : 'organizer';
+
+        $booking = $this->bookingService->cancel(
+            $bookingId,
+            $cancelledBy,
+            $request->input('reason')
+        );
+
+        return response()->json([
+            'message' => 'تم إلغاء الحجز.',
+            'data'    => $booking,
+        ]);
+    }
+
+    public function index(Request $request): JsonResponse
+    {
+        $filters = $request->only(['status', 'booking_type']);
+
+        $bookings = $this->bookingService->getUserBookings(
+            $request->user()->id,
+            $filters,
+            $request->input('per_page', 15)
+        );
+
+        return response()->json([
+            'success' => true,
+            'data'    => $bookings,
+        ]);
+    }
+    public function accept(string $bookingId): JsonResponse
 {
-    // نتحقق من وجود الحجز والصلاحية أولاً (بدون lock — فقط للـ Authorization)
     $booking = \App\Models\Booking::findOrFail($bookingId);
-    Gate::authorize('cancel', $booking);
+    Gate::authorize('accept', $booking);
 
-    $cancelledBy = $request->user()->hasRole('provider') ? 'provider' : 'organizer';
+    $providerId = request()->user()->providerProfile->id;
 
-    $booking = $this->bookingService->cancel(
-        $bookingId,
-        $cancelledBy,
-        $request->input('reason')
-    );
+    $booking = $this->bookingService->accept($bookingId, $providerId);
 
     return response()->json([
-        'message' => 'تم إلغاء الحجز.',
+        'success' => true,
+        'message' => 'تم قبول الحجز بنجاح.',
         'data'    => $booking,
     ]);
 }

@@ -21,7 +21,19 @@ class ProviderFactory extends Factory
             'is_active' => true,
         ];
     }
+public function company(): static
+{
+    return $this->state(fn (array $attributes) => [
+        'provider_type' => 'company',
+    ]);
+}
 
+public function freelancer(): static
+{
+    return $this->state(fn (array $attributes) => [
+        'provider_type' => 'freelancer',
+    ]);
+}
     // state لإنشاء مزود خدمة معتمد (Approved)
     public function approved(): static
     {
