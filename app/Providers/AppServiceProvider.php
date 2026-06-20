@@ -14,25 +14,23 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Kreait\Firebase\Contract\Messaging;
 use Kreait\Firebase\Factory;
-use Kreait\Laravel\Firebase\Facades\Firebase;
 
 class AppServiceProvider extends ServiceProvider
-{// app/Providers/AppServiceProvider.php
-// AppServiceProvider.php
-public function register(): void
 {
-    $this->app->singleton(Messaging::class, function () {
-        $credentialsPath = storage_path('app/firebase/royal-event-app-firebase-adminsdk-fbsvc-02740649a6.json');
-        
-        if (!file_exists($credentialsPath)) {
-            return null; // بدل throw
-        }
-        
-        return (new \Kreait\Firebase\Factory)
-            ->withServiceAccount($credentialsPath)
-            ->createMessaging();
-    });
-}
+    public function register(): void
+    {
+        $this->app->singleton(Messaging::class, function ($app) {
+            $credentials = env('FIREBASE_CREDENTIALS', 'storage/app/firebase/royal-event-app-firebase-adminsdk-fbsvc-02740649a6.json');
+            
+            $fullPath = is_array($credentials) ? $credentials : base_path($credentials);
+
+            if (!is_array($fullPath) && !file_exists($fullPath)) {
+                throw new \Exception("Firebase credentials file not found at: " . $fullPath);
+            }
+
+            return (new Factory)->withServiceAccount($fullPath)->createMessaging();
+        });
+    }
 
     public function boot(): void
     {
