@@ -1,4 +1,3 @@
-<?php
 
 use App\Http\Controllers\ArrangementController;
 use App\Http\Controllers\AdminListingController;
@@ -26,7 +25,6 @@ Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'store']);
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
     Route::post('/verify-otp', [AuthController::class, 'verifyOtp'])->middleware('throttle:verify-otp');
-
     Route::get('/google/redirect', [AuthController::class, 'redirectToGoogle']);
     Route::get('/google/callback', [AuthController::class, 'handleGoogleCallBack']);
     Route::post('/google/mobile-login', [AuthController::class, 'handleGoogleMobileLogin']);
@@ -79,8 +77,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::delete('/{listing}', [ListingController::class, 'destroy'])->middleware('permission:delete listings');
         });
     });
-
-    Route::middleware('approved_provider')->group(function () {
+Route::middleware('approved_provider')->group(function () {
         Route::post('/job-offers', [JobOfferController::class, 'store']);
         Route::get('/company/applicants', [JobOfferController::class, 'getApplicants']);
         Route::put('/contracts/{id}/status', [JobOfferController::class, 'updateApplicantStatus']);
@@ -130,6 +127,7 @@ Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function
     
 
 });
+
 Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/notifications', [NotificationController::class, 'all']);
