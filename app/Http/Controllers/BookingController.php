@@ -18,7 +18,7 @@ class BookingController extends Controller
 
     public function store(StoreBookingRequest $request): JsonResponse
     {
-        $data =  \App\Models\Booking::fromRequest(
+        $data = \App\Models\Booking::fromRequest(
             $request->validated(),
             $request->user()->id
         );

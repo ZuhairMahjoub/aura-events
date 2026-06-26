@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Providers;
-
+use Kreait\Firebase\Contract\Firestore;
 use App\Events\UserRegistered;
 use App\Listeners\SendEmailVerification;
 use App\Listeners\SendOtpNotification;
@@ -30,6 +30,9 @@ class AppServiceProvider extends ServiceProvider
 
             return (new Factory)->withServiceAccount($fullPath)->createMessaging();
         });
+     $this->app->singleton(\App\Services\FirestoreService::class, function ($app) {
+        return new \App\Services\FirestoreService();
+    });
     }
 
     public function boot(): void

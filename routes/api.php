@@ -1,4 +1,5 @@
-
+<?php
+use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ArrangementController;
 use App\Http\Controllers\AdminListingController;
 use App\Http\Controllers\Auth\NewPasswordController;
@@ -143,4 +144,8 @@ Route::middleware(['auth:sanctum', 'approved_provider'])->group(function () {
     Route::get('/provider/profile', [ProviderController::class, 'profile']);
     
     Route::get('/admin/providers', [ProviderController::class, 'index']);
+});
+// routes/api.php
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/chat/initialize', [ChatController::class, 'initializeChat']);
 });
