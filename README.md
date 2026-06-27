@@ -1,56 +1,61 @@
-Aura Events Management System 
+Aura Events Management System
 A comprehensive event and hall management platform designed to provide a seamless, reliable booking experience. This project focuses on high-quality backend architecture, ensuring system stability, performance, and scalability.
 
- Tech Stack & Architecture
+🛠 Tech Stack & Architecture
 Framework: Laravel (PHP)
-
-Authorization: Spatie Laravel-Permission (Role-Based Access Control - RBAC)
 
 Design Pattern: Service-Oriented Architecture (SOA)
 
 Database: MySQL with Polymorphic Relationships
 
-Caching & Security: Redis (used for OTP storage)
+Real-time Messaging: Google Firestore (NoSQL)
 
-Authentication: JWT/Passport implementation using Access Tokens and Refresh Tokens
+Authentication: JWT/Sanctum implementation (Access & Refresh Tokens)
+
+Authorization: Spatie Laravel-Permission (RBAC)
+
+Caching & Security: Redis (OTP storage)
 
 Asynchronous Processing: Laravel Queues & Jobs
 
 External Integrations: Google OAuth2, UltraMsg (WhatsApp API), SMTP, Firebase (FCM)
 
-Monitoring & Logging: Robust logging system for audit trails and error tracking
+💬 Real-time Messaging System
+To provide a seamless and highly responsive user experience, the platform incorporates a robust, real-time messaging engine:
 
-Code Quality: Clean Code, SOLID Principles, Reusable Traits
+Real-time Infrastructure: Built using Google Firestore, enabling sub-millisecond data synchronization between users without the need for traditional HTTP polling.
 
- Key Features
-Advanced Access Control: Granular permissions and roles managed via Spatie, ensuring secure access management for Admins, Hall Owners, and Users.
+Hybrid Architecture: * Laravel (Backend): Acts as the orchestrator to manage business logic, authorization, and room creation.
 
-Smart Booking System: Efficiently manage hall availability and bookings with an intuitive flow.
+Firestore (NoSQL): Handles high-frequency message streams, ensuring performance and scalability.
 
-Conflict Prevention: Implemented a robust validation algorithm to detect overlapping bookings, ensuring zero conflicts in the reservation schedule.
+Instant Notifications: Integrated with Firebase Cloud Messaging (FCM) to deliver push notifications when users are offline, ensuring no conversation is missed.
 
-Versatile Authentication: Multi-factor authentication support including Google OAuth2, OTP via WhatsApp (UltraMsg API), and Email Verification (SMTP).
+Scalable Communication: Decouples messaging load from the primary MySQL database, ensuring the system remains performant even under heavy concurrent usage.
 
-Instant Notifications: Real-time push notifications using Firebase Cloud Messaging (FCM).
+✨ Key Features
+Advanced Access Control: Granular permissions and roles managed via Spatie for Admins, Hall Owners, and Users.
 
- Engineering Highlights
-Security & Roles: Implemented custom Policies and integrated Spatie to enforce strict access control, ensuring that every request is authorized based on the user's role and permissions.
+Smart Booking System: Efficiently manage hall availability with a robust validation algorithm to prevent overlapping bookings.
 
-Clean Code: Adhered to strict coding standards by decoupling logic into Services, making the codebase highly maintainable and testable.
+Versatile Authentication: Multi-factor authentication support including Google OAuth2, WhatsApp OTP, and Email verification.
 
-Performance: Leveraged Redis for OTP storage, significantly reducing database load and ensuring secure, time-bound data management.
+Real-time Communication: Secure, instant messaging between customers and service providers.
 
-Authentication Security: Implemented a secure authentication flow using Access Tokens and Refresh Tokens to ensure robust session management.
+🏗 Engineering Highlights
+Clean Code & SOLID: Logic is decoupled into Services, making the codebase maintainable and testable.
 
-Data Integrity: Utilized Database Transactions to ensure consistency during sensitive operations like booking and conflict checks.
+Data Integrity: Database Transactions are utilized to ensure consistency during sensitive operations like booking and conflict checks.
 
- How to Run
+Authentication Security: Secure flow using Access Tokens and Refresh Tokens for robust session management.
+
+🚀 How to Run
 Clone the repository: git clone https://github.com/ZuhairMahjoub/aura-events
 
 Install dependencies: composer install
 
-Set up your .env file and database configurations.
+Configure environment: Set up your .env file with database and Firebase credentials.
 
 Run migrations: php artisan migrate
 
-Start the development server: php artisan serve
+Start the server: php artisan serve
