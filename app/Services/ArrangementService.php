@@ -1,7 +1,7 @@
 <?php
- 
+
 namespace App\Services;
- 
+
 use App\Models\CompanyFreelancerContract;
 use App\Models\Listing;
 use App\Models\ListingVariant;
@@ -10,6 +10,7 @@ use App\Models\PackageItem;
 use App\Models\Provider;
 use Exception;
 use Google\Service\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -17,14 +18,12 @@ use Illuminate\Support\Facades\Storage as FacadesStorage;
 
 class ArrangementService
 {
-    public function __construct(protected MediaService $mediaService)
-    {
-    }
+    public function __construct(protected MediaService $mediaService) {}
  
     // ────────────────────────────────────────────────────────────────────────────
     // Public API
     // ────────────────────────────────────────────────────────────────────────────
- 
+
     /**
      * Create a new package listing with its items, freelancers, and images.
      *
@@ -39,14 +38,14 @@ class ArrangementService
         if (! empty($data['items'])) {
             $this->validateItems($data['items'], $providerId);
         }
- 
+
         if (! empty($data['freelancers'])) {
             $this->validateFreelancers($data['freelancers'], $providerId);
         }
- 
+
         // ── Transactional creation ────────────────────────────────────────────
         return DB::transaction(function () use ($data, $providerId) {
- 
+
             $listing = Listing::create([
                 'provider_id'              => $providerId,
                 'category_id'              => $data['category_id'],
@@ -59,8 +58,10 @@ class ArrangementService
                 'cancel_after_acceptance'  => $data['cancel_after_acceptance']  ?? false,
                 'cancel_before_payment'    => $data['cancel_before_payment']    ?? false,
                 'moderation_status'        => 'pending_approval',
+                'stock_quantity'     => $data['capacity'],
+                'currency'   => $data['currency'],
             ]);
- 
+
             $variant = ListingVariant::create([
                 'listing_id'         => $listing->id,
                 'variant_name'       => $data['title'],   // mirrors listing title
@@ -70,67 +71,103 @@ class ArrangementService
                     ? ['capacity' => $data['capacity']]
                     : null,
             ]);
- 
+
             if (! empty($data['items'])) {
                 $this->bulkInsertPackageItems($variant->id, $data['items']);
             }
- 
+
             if (! empty($data['freelancers'])) {
                 $this->bulkInsertPackageFreelancers($variant->id, $data['freelancers']);
             }
- 
+
             if (! empty($data['images'])) {
                 $this->attachImages($data['images'], $listing);
             }
- 
+
+            if (!empty($data['availabilities'])) {
+                $availabilitiesToInsert = [];
+                $slotsToInsert = [];
+
+                foreach ($data['availabilities'] as $avail) {
+                    $availabilityId = (string) Str::ulid();
+
+                    $availabilitiesToInsert[] = [
+                        'id' => $availabilityId,
+                        'listing_variant_id' => $variant->id,
+                        'available_date' => \Carbon\Carbon::parse($avail['date'])->format('Y-m-d'),
+                        'is_blocked' => false,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+
+                    if (!empty($avail['slots'])) {
+                        foreach ($avail['slots'] as $slot) {
+                            $slotsToInsert[] = [
+                                'id' => (string) Str::ulid(),
+                                'listing_availability_id' => $availabilityId,
+                                'start_time' => $slot['start_time'],
+                                'end_time' => $slot['end_time'],
+                                'remaining_capacity' => $data['capacity'] ?? 1,
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ];
+                        }
+                    }
+                }
+
+                if (!empty($availabilitiesToInsert)) {
+                    DB::table('listing_availabilities')->insert($availabilitiesToInsert);
+                }
+
+                if (!empty($slotsToInsert)) {
+                    DB::table('listing_slots')->insert($slotsToInsert);
+                }
+            }
             return $listing->load([
-                'variants.packageItems.includedVariant.listing',
+                'variants.packageItems.includedVariant.listing.images',
                 'variants.packageFreelancers.freelancer',
+                'variants.availabilities.slots',
                 'images',
                 'category',
                 'district',
             ]);
         });
     }
- 
-    /**
-     * Update an existing package listing.
-     *
-     * When `items` is present in $data, it fully replaces all existing package items.
-     *
-     * @param  Listing  $listing     The package listing to update
-     * @param  array    $data        Validated data from ArrangementUpdateRequest
-     * @param  string   $providerId  Must match listing->provider_id
-     *
-     * @throws Exception
-     */
+
+
     public function updateArrangement(Listing $listing, array $data, string $providerId): Listing
     {
         if ($listing->provider_id !== $providerId) {
             throw new Exception('لا تملك صلاحية تعديل هذا الترتيب.', 403);
         }
- 
+
         // Pre-validate new items before touching the DB
         if (isset($data['items'])) {
             $this->validateItems($data['items'], $providerId);
         }
- 
+
         return DB::transaction(function () use ($listing, $data, $providerId) {
- 
+
             // ── Update Listing core fields ────────────────────────────────────
             $listingFields = [
-                'category_id', 'district_id', 'title', 'description',
-                'secondary_contact_number', 'is_provider_location_based',
-                'cancel_before_acceptance', 'cancel_after_acceptance', 'cancel_before_payment',
+                'category_id',
+                'district_id',
+                'title',
+                'description',
+                'secondary_contact_number',
+                'is_provider_location_based',
+                'cancel_before_acceptance',
+                'cancel_after_acceptance',
+                'cancel_before_payment',
             ];
             $listingPayload = array_intersect_key($data, array_flip($listingFields));
             if ($listingPayload) {
                 $listing->update($listingPayload);
             }
- 
+
             // ── Update Variant (price / capacity) ─────────────────────────────
             $variant = $listing->variants()->firstOrFail();
- 
+
             $variantPayload = array_intersect_key($data, array_flip(['price', 'price_type']));
             if (isset($data['capacity'])) {
                 $variantPayload['dynamic_attributes'] = array_merge(
@@ -144,7 +181,7 @@ class ArrangementService
             if ($variantPayload) {
                 $variant->update($variantPayload);
             }
- 
+
             // ── Sync package items (full replacement) ─────────────────────────
             if (isset($data['items'])) {
                 // Hard-delete all existing items before re-inserting the new set.
@@ -153,22 +190,22 @@ class ArrangementService
                 PackageItem::where('package_variant_id', $variant->id)->forceDelete();
                 $this->bulkInsertPackageItems($variant->id, $data['items']);
             }
- 
+
             // ── Add new images ────────────────────────────────────────────────
             if (! empty($data['images'])) {
                 $this->attachImages($data['images'], $listing);
             }
- 
+
             // ── Delete requested images ───────────────────────────────────────
             if (! empty($data['images_to_delete'])) {
                 foreach ($data['images_to_delete'] as $imageId) {
                     $image = $listing->images()->find($imageId);
                     if ($image) {
-                         $this->mediaService->deleteImage($image);
+                        $this->mediaService->deleteImage($image);
                     }
                 }
             }
- 
+
             return $listing->load([
                 'variants.packageItems.includedVariant.listing',
                 'variants.packageFreelancers.freelancer',
@@ -178,41 +215,106 @@ class ArrangementService
             ]);
         });
     }
- 
+
     /**
      * Return the company's own physical-product variants for the item picker UI.
      */
     public function getProviderProducts(string $providerId): array
     {
-        return ListingVariant::with('listing')
-            ->whereHas('listing', fn ($q) => $q
-                ->where('provider_id', $providerId)
-                ->where('listing_type', 'physical_product')
-                ->where('moderation_status', 'approved')
-            )
-            ->select(['id', 'listing_id', 'variant_name', 'price', 'currency', 'price_type', 'stock_quantity', 'dynamic_attributes'])
+        // 1. الاستعلام من جدول Listing الأساسي لجلب المنتج مع كل تفاصيله
+        return \App\Models\Listing::with([
+            'images',
+            'variants.images',
+            'variants.availabilities.slots',
+            'category', // 💡 التعديل 1: جلب علاقة القسم
+            'district'  // 💡 التعديل 2: جلب علاقة المنطقة
+        ])
+            ->where('provider_id', $providerId)
+            ->where('listing_type', 'physical_product')
+            ->whereIn('moderation_status', ['approved', 'draft', 'pending_approval', 'rejected', 'cancelled'])
             ->get()
-            ->map(fn ($v) => [
-                'id'           => $v->id,
-                'product_name' => $v->listing->title,
-                'variant_name' => $v->variant_name,
-                'price'        => (float) $v->price,
-                'currency'     => $v->currency,
-                'price_type'   => $v->price_type,
-                'stock'        => $v->stock_quantity,
-                'attributes'   => $v->dynamic_attributes,
+            ->map(fn($listing) => [
+                // 2. تعيين حقول المنتج الأساسي (الفرونت إند يقرأ title أو name)
+                'id'           => $listing->id,
+                'title'        => $listing->title,
+                'name'         => $listing->title,
+                'description'  => $listing->description,
+                'status'       => $listing->moderation_status,
+                'category'     => $listing->category,
+                'district'     => $listing->district,
+                'image'        => count($listing->images) > 0 ? $listing->images[0] : null,
+                'cancel_before_acceptance' => (bool) $listing->cancel_before_acceptance,
+                'cancel_after_acceptance'  => (bool) $listing->cancel_after_acceptance,
+                'cancel_before_payment'    => (bool) $listing->cancel_before_payment,
+                // 3. تجهيز مصفوفة الـ Variants بالأسماء التي يتوقعها ProductCard
+                'variants'     => $listing->variants->map(fn($v) => [
+                    'id'             => $v->id,
+                    'name'           => $v->variant_name,   // الفرونت يقرأ اللون من هنا
+                    'price'          => (float) $v->price,
+                    'currency'       => $v->currency,
+                    'price_type'     => $v->price_type,
+                    'stock'          => $v->stock_quantity, // تحويل stock_quantity إلى stock للفرونت
+                    'attributes'     => $v->dynamic_attributes,
+
+                    // إرفاق علاقات الصور والتواريخ لكل Variant
+                    'images'         => $v->images,
+                    'availabilities' => $v->availabilities,
+                ])->toArray(),
             ])
             ->toArray();
     }
- 
-    /**
+
+    /**public function getProviderProducts(string $providerId): array
+    {
+        // 1. الاستعلام من جدول Listing الأساسي لجلب المنتج مع كل تفاصيله
+        return \App\Models\Listing::with([
+                'images',
+                'variants.images',
+                'variants.availabilities.slots',
+                'category', // 💡 التعديل 1: جلب علاقة القسم
+                'district'  // 💡 التعديل 2: جلب علاقة المنطقة
+            ])
+            ->where('provider_id', $providerId)
+            ->where('listing_type', 'physical_product')
+            ->whereIn('moderation_status',['approved', 'draft', 'pending_approval', 'rejected', 'cancelled'])
+            ->get()
+            ->map(fn ($listing) => [
+                // 2. تعيين حقول المنتج الأساسي (الفرونت إند يقرأ title أو name)
+                'id'           => $listing->id,
+                'title'        => $listing->title, 
+                'name'         => $listing->title, 
+                'description'  => $listing->description,
+                'status'       => $listing->moderation_status,
+                'category'     => $listing->category,
+                'district'     => $listing->district,
+                'image'        => count($listing->images) > 0 ? $listing->images[0] : null,
+                'cancel_before_acceptance' => (bool) $listing->cancel_before_acceptance,
+                'cancel_after_acceptance'  => (bool) $listing->cancel_after_acceptance,
+                'cancel_before_payment'    => (bool) $listing->cancel_before_payment,
+                // 3. تجهيز مصفوفة الـ Variants بالأسماء التي يتوقعها ProductCard
+                'variants'     => $listing->variants->map(fn ($v) => [
+                    'id'             => $v->id,
+                    'name'           => $v->variant_name,   // الفرونت يقرأ اللون من هنا
+                    'price'          => (float) $v->price,
+                    'currency'       => $v->currency,
+                    'price_type'     => $v->price_type,
+                    'stock'          => $v->stock_quantity, // تحويل stock_quantity إلى stock للفرونت
+                    'attributes'     => $v->dynamic_attributes,
+                    
+                    // إرفاق علاقات الصور والتواريخ لكل Variant
+                    'images'         => $v->images,
+                    'availabilities' => $v->availabilities,
+                ])->toArray(),
+            ])
+            ->toArray();
+    }
      * Return freelancers who have an active contract with the given company.
      */
     public function getAvailableFreelancers(string $companyId): EloquentCollection
     {
         return Provider::where('provider_type', 'freelancer')
             ->where('is_active', true)
-            ->whereHas('activeContracts', fn ($q) => $q->where('company_id', $companyId))
+            ->whereHas('activeContracts', fn($q) => $q->where('company_id', $companyId))
             ->select(['id', 'brand_name'])
             ->get();
     }
@@ -220,7 +322,7 @@ class ArrangementService
     // ────────────────────────────────────────────────────────────────────────────
     // Pre-validation helpers
     // ────────────────────────────────────────────────────────────────────────────
- 
+
     /**
      * Validate all items in the `items[]` array.
      *
@@ -235,22 +337,22 @@ class ArrangementService
     private function validateItems(array $items, string $providerId): void
     {
         $variantIds = collect($items)->pluck('variant_id')->unique()->values()->toArray();
- 
+
         // Load all variants with their parent listings in one query
         $variants = ListingVariant::with('listing')
             ->whereIn('id', $variantIds)
             ->get()
             ->keyBy('id');
- 
+
         // All variant IDs must resolve (redundant with FormRequest but defensive)
         if ($variants->count() !== count($variantIds)) {
             throw new Exception('أحد عناصر الباقة المختارة غير موجود.', 403);
         }
- 
+
         foreach ($variants as $variant) {
             $listing      = $variant->listing;
             $displayTitle = $this->extractTitle($listing); // ← safe string regardless of cast
- 
+
             // ① No circular packages
             if ($listing->listing_type === 'package') {
                 throw new Exception(
@@ -258,7 +360,7 @@ class ArrangementService
                     403
                 );
             }
- 
+
             // ② Ownership: variant's listing must belong to the same company
             if ($listing->provider_id !== $providerId) {
                 throw new Exception(
@@ -266,7 +368,7 @@ class ArrangementService
                     403
                 );
             }
- 
+
             // ③ Listing must be approved or awaiting approval
             if (! in_array($listing->moderation_status, ['approved', 'pending_approval'], true)) {
                 throw new Exception(
@@ -276,7 +378,7 @@ class ArrangementService
             }
         }
     }
- 
+
     /**
      * Validate all freelancers in the `freelancers[]` array.
      *
@@ -291,17 +393,17 @@ class ArrangementService
     {
         $freelancerIds = collect($freelancers)->pluck('freelancer_id')->unique()->toArray();
         $contractIds   = collect($freelancers)->pluck('contract_id')->unique()->toArray();
- 
+
         // ① All freelancer IDs must be active freelancer providers
         $activeFreelancerCount = Provider::where('provider_type', 'freelancer')
             ->where('is_active', true)
             ->whereIn('id', $freelancerIds)
             ->count();
- 
+
         if ($activeFreelancerCount !== count($freelancerIds)) {
             throw new Exception('بعض الفريلانسرز المختارين غير نشطين أو غير موجودين.', 403);
         }
- 
+
         // ② All contracts must be active and belong to this company
         $validContracts = CompanyFreelancerContract::where('company_id', $companyId)
             ->where('status', 'active')
@@ -309,14 +411,14 @@ class ArrangementService
             ->whereIn('freelancer_id', $freelancerIds)
             ->get()
             ->keyBy('id');
- 
+
         if ($validContracts->count() !== count($contractIds)) {
             throw new Exception(
                 'بعض الفريلانسرز لا يملكون عقوداً سارية مع شركتك أو العقود غير مطابقة.',
                 403
             );
         }
- 
+
         // ③ Cross-reference: each contract must belong to its stated freelancer
         foreach ($freelancers as $entry) {
             $contract = $validContracts->get($entry['contract_id']);
@@ -332,13 +434,13 @@ class ArrangementService
     // ────────────────────────────────────────────────────────────────────────────
     // Bulk insert helpers (chunked for performance)
     // ────────────────────────────────────────────────────────────────────────────
- 
+
     /**
      * Bulk-insert package items for a given package variant.
      */
     private function bulkInsertPackageItems(string $variantId, array $items): void
     {
-        $rows = collect($items)->map(fn ($item) => [
+        $rows = collect($items)->map(fn($item) => [
             'id'                  => (string) str()->ulid(),
             'package_variant_id'  => $variantId,
             'included_variant_id' => $item['variant_id'],
@@ -346,18 +448,18 @@ class ArrangementService
             'created_at'          => now(),
             'updated_at'          => now(),
         ])->toArray();
- 
+
         foreach (array_chunk($rows, 500) as $chunk) {
             PackageItem::insert($chunk);
         }
     }
- 
+
     /**
      * Bulk-insert package freelancers for a given package variant.
      */
     private function bulkInsertPackageFreelancers(string $variantId, array $freelancers): void
     {
-        $rows = collect($freelancers)->map(fn ($f) => [
+        $rows = collect($freelancers)->map(fn($f) => [
             'id'                 => (string) str()->ulid(),
             'package_variant_id' => $variantId,
             'freelancer_id'      => $f['freelancer_id'],
@@ -365,40 +467,39 @@ class ArrangementService
             'created_at'         => now(),
             'updated_at'         => now(),
         ])->toArray();
- 
+
         foreach (array_chunk($rows, 500) as $chunk) {
             PackageFreelancer::insert($chunk);
         }
     }
- 
+
     /**
      * Move temp images to their final location and attach them to the listing.
      */
-private function attachImages(array $tempPaths, Listing $listing): void
-{
-    foreach ($tempPaths as $path) {
-        $cleanPath = is_array($path) ? $path[0] : $path;
+    private function attachImages(array $tempPaths, Listing $listing): void
+    {
+        foreach ($tempPaths as $path) {
+            $cleanPath = is_array($path) ? $path[0] : $path;
 
-        // التعديل هنا: الفحص باستخدام public_path المباشر المتوافق مع الـ MediaService الجديدة
-        $absTempPath = public_path(str_replace('/', DIRECTORY_SEPARATOR, $cleanPath));
+            // التعديل هنا: الفحص باستخدام public_path المباشر المتوافق مع الـ MediaService الجديدة
+            $absTempPath = storage_path('app/public/' . str_replace('/', DIRECTORY_SEPARATOR, $cleanPath));
+            if (! file_exists($absTempPath)) {
+                Log::error("فشل العثور على الملف المؤقت في المجلد العام: {$absTempPath}");
+                continue;
+            }
 
-        if (! file_exists($absTempPath)) {
-            Log::error("فشل العثور على الملف المؤقت في المجلد العام: {$absTempPath}");
-            continue;
-        }
-
-        try {
-            $this->mediaService->moveAndAttach(
-                $cleanPath,
-                $listing,
-                "arrangements/{$listing->id}/main"
-            );
-        } catch (\Exception $e) {
-            Log::error("خطأ أثناء نقل الصورة {$cleanPath}: " . $e->getMessage());
+            try {
+                $this->mediaService->moveAndAttach(
+                    $cleanPath,
+                    $listing,
+                    "arrangements/{$listing->id}/main"
+                );
+            } catch (\Exception $e) {
+                Log::error("خطأ أثناء نقل الصورة {$cleanPath}: " . $e->getMessage());
+            }
         }
     }
-}
-     private function extractTitle(mixed $title): string
+    private function extractTitle(mixed $title): string
     {
         if (is_array($title)) {
             return $title['ar'] ?? $title['en'] ?? 'عنوان غير متوفر';
@@ -406,7 +507,3 @@ private function attachImages(array $tempPaths, Listing $listing): void
         return (string) $title;
     }
 }
- 
-
-
-

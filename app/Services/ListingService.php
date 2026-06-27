@@ -90,7 +90,18 @@ class ListingService
                 );
 
                 Log::info('Variant Processing:', ['variant_name' => $variantData['variant_name']['en'] ?? 'Unknown']);
+                if (isset($variantData['images']) && is_array($variantData['images'])) {
+                    foreach ($variantData['images'] as $tempPath) {
+                        $fullTempPath = Str::startsWith($tempPath, 'temp/') ? $tempPath : 'temp/' . $tempPath;
 
+                        $this->mediaService->moveAndAttach(
+                            $fullTempPath,
+                            $variant,
+                            "listings/{$listing->id}/variants",
+                            "Variant Image - " . ($variantData['variant_name']['en'] ?? 'Default')
+                        );
+                    }
+                }
                 // تم توحيد منطق الإدخال هنا لتجنب التكرار (Double Insertion Bug)
                 if (!empty($variantData['date_range'])) {
                     Log::info('SUCCESS: date_range detected');
@@ -237,138 +248,138 @@ class ListingService
 
         return $services;
     }
-private function bulkInsertAvailabilitiesAndSlots($variant, array $availabilitiesData): void
-{
-    DB::table('listing_availabilities')
-        ->where('listing_variant_id', $variant->id)
-        ->delete();
+    private function bulkInsertAvailabilitiesAndSlots($variant, array $availabilitiesData): void
+    {
+        DB::table('listing_availabilities')
+            ->where('listing_variant_id', $variant->id)
+            ->delete();
 
-    $availabilitiesToInsert = [];
-    $slotsToInsert          = [];
+        $availabilitiesToInsert = [];
+        $slotsToInsert          = [];
 
-    foreach ($availabilitiesData as $availabilityData) {
-        $availabilityId = (string) Str::ulid();
-        $formattedDate = Carbon::parse($availabilityData['available_date'])->format('Y-m-d');
+        foreach ($availabilitiesData as $availabilityData) {
+            $availabilityId = (string) Str::ulid();
+            $formattedDate = Carbon::parse($availabilityData['available_date'])->format('Y-m-d');
 
-        $availabilitiesToInsert[] = [
-            'id'                 => $availabilityId,
-            'listing_variant_id' => $variant->id,
-            'available_date'     => $formattedDate,
-            'is_blocked'         => $availabilityData['is_blocked'] ?? false,
-            'created_at'         => now(),
-            'updated_at'         => now(),
-        ];
+            $availabilitiesToInsert[] = [
+                'id'                 => $availabilityId,
+                'listing_variant_id' => $variant->id,
+                'available_date'     => $formattedDate,
+                'is_blocked'         => $availabilityData['is_blocked'] ?? false,
+                'created_at'         => now(),
+                'updated_at'         => now(),
+            ];
 
-        foreach ($availabilityData['slots'] ?? [] as $slotData) {
-            // ✅ حل مشكلة الاسم: دعم slot_name أو name والتعامل مع المصفوفات المترجمة
+            foreach ($availabilityData['slots'] ?? [] as $slotData) {
+                // ✅ حل مشكلة الاسم: دعم slot_name أو name والتعامل مع المصفوفات المترجمة
+                $slotNameValue = $slotData['slot_name'] ?? $slotData['name'] ?? null;
+                $encodedSlotName = is_array($slotNameValue)
+                    ? json_encode($slotNameValue, JSON_UNESCAPED_UNICODE)
+                    : $slotNameValue;
+
+                // ✅ حل مشكلة الوقت: دمج تاريخ اليوم الفعلي المستهدف مع ساعات الشيفت
+                $startTime = Carbon::parse($formattedDate . ' ' . $slotData['start_time'])->toDateTimeString();
+                $endTime   = Carbon::parse($formattedDate . ' ' . $slotData['end_time'])->toDateTimeString();
+
+                $slotsToInsert[] = [
+                    'id'                      => (string) Str::ulid(),
+                    'listing_availability_id' => $availabilityId,
+                    'slot_name'               => $encodedSlotName,
+                    'start_time'              => $startTime,
+                    'end_time'                => $endTime,
+                    'remaining_capacity'      => $slotData['remaining_capacity'] ?? 1,
+                    'created_at'              => now(),
+                    'updated_at'              => now(),
+                ];
+            }
+        }
+
+        if (!empty($availabilitiesToInsert)) {
+            DB::table('listing_availabilities')->insert($availabilitiesToInsert);
+        }
+
+        if (!empty($slotsToInsert)) {
+            DB::table('listing_slots')->insert($slotsToInsert);
+        }
+    }
+    private function syncAvailabilities($variant, array $availabilitiesData): void
+    {
+        // 1. استخراج الـ IDs الموجودة في الطلب (التي سيتم الاحتفاظ بها)
+        $sentIds = collect($availabilitiesData)->pluck('id')->filter()->values()->toArray();
+
+        // 2. تنظيف القاعدة: حذف أي سجل متعلق بهذا الـ Variant وغير موجود في الطلب الحالي
+        // هذا يضمن إخلاء التواريخ قبل البدء في عمليات التحديث أو الإنشاء
+        $variant->availabilities()->whereNotIn('id', $sentIds)->delete();
+
+        // 3. المعالجة: المرور على البيانات المرسلة
+        foreach ($availabilitiesData as $availabilityData) {
+
+            $date = $availabilityData['available_date'];
+
+            // 4. فحص الأمان: تأكد أن التاريخ ليس محجوزاً بسجل آخر في القاعدة
+            // (باستثناء السجل الحالي الذي نقوم بتحديثه)
+            $query = $variant->availabilities()->where('available_date', $date);
+
+            if (!empty($availabilityData['id'])) {
+                $query->where('id', '!=', $availabilityData['id']);
+            }
+
+            if ($query->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'availabilities' => "التاريخ {$date} محجوز مسبقاً لهذا الـ Variant."
+                ]);
+            }
+
+            // 5. التحديث أو الإنشاء
+            if (!empty($availabilityData['id'])) {
+                $availability = $variant->availabilities()->findOrFail($availabilityData['id']);
+                $availability->update([
+                    'available_date' => $date,
+                    'is_blocked'     => $availabilityData['is_blocked'] ?? false,
+                ]);
+            } else {
+                $availability = $variant->availabilities()->create([
+                    'id'             => (string) \Illuminate\Support\Str::ulid(),
+                    'available_date' => $date,
+                    'is_blocked'     => $availabilityData['is_blocked'] ?? false,
+                ]);
+            }
+
+            // 6. مزامنة الـ Slots الخاصة بهذا التاريخ
+            if (isset($availabilityData['slots'])) {
+                $this->syncSlots($availability, $availabilityData['slots']);
+            }
+        }
+    }
+    private function syncSlots($availability, array $slotsData)
+    {
+        $sentSlotIds = collect($slotsData)->pluck('id')->filter()->toArray();
+
+        $availability->slots()
+            ->whereNotIn('id', $sentSlotIds)
+            ->forceDelete();
+
+        $formattedDate = Carbon::parse($availability->available_date)->format('Y-m-d');
+
+        foreach ($slotsData as $slotData) {
+
+            // ✅ بدون ترميز يدوي — مرر القيمة كما هي (array أو string)
             $slotNameValue = $slotData['slot_name'] ?? $slotData['name'] ?? null;
-            $encodedSlotName = is_array($slotNameValue) 
-                ? json_encode($slotNameValue, JSON_UNESCAPED_UNICODE) 
-                : $slotNameValue;
 
-            // ✅ حل مشكلة الوقت: دمج تاريخ اليوم الفعلي المستهدف مع ساعات الشيفت
             $startTime = Carbon::parse($formattedDate . ' ' . $slotData['start_time'])->toDateTimeString();
             $endTime   = Carbon::parse($formattedDate . ' ' . $slotData['end_time'])->toDateTimeString();
 
-            $slotsToInsert[] = [
-                'id'                      => (string) Str::ulid(),
-                'listing_availability_id' => $availabilityId,
-                'slot_name'               => $encodedSlotName,
-                'start_time'              => $startTime,
-                'end_time'                => $endTime,
-                'remaining_capacity'      => $slotData['remaining_capacity'] ?? 1,
-                'created_at'              => now(),
-                'updated_at'              => now(),
-            ];
+            $availability->slots()->updateOrCreate(
+                ['id' => $slotData['id'] ?? null],
+                [
+                    'slot_name'          => $slotNameValue,   // الـ cast يتولى الترميز
+                    'start_time'         => $startTime,
+                    'end_time'           => $endTime,
+                    'remaining_capacity' => $slotData['remaining_capacity'] ?? 1,
+                ]
+            );
         }
     }
-
-    if (!empty($availabilitiesToInsert)) {
-        DB::table('listing_availabilities')->insert($availabilitiesToInsert);
-    }
-
-    if (!empty($slotsToInsert)) {
-        DB::table('listing_slots')->insert($slotsToInsert);
-    }
-}
-private function syncAvailabilities($variant, array $availabilitiesData): void
-{
-    // 1. استخراج الـ IDs الموجودة في الطلب (التي سيتم الاحتفاظ بها)
-    $sentIds = collect($availabilitiesData)->pluck('id')->filter()->values()->toArray();
-
-    // 2. تنظيف القاعدة: حذف أي سجل متعلق بهذا الـ Variant وغير موجود في الطلب الحالي
-    // هذا يضمن إخلاء التواريخ قبل البدء في عمليات التحديث أو الإنشاء
-    $variant->availabilities()->whereNotIn('id', $sentIds)->delete();
-
-    // 3. المعالجة: المرور على البيانات المرسلة
-    foreach ($availabilitiesData as $availabilityData) {
-        
-        $date = $availabilityData['available_date'];
-
-        // 4. فحص الأمان: تأكد أن التاريخ ليس محجوزاً بسجل آخر في القاعدة
-        // (باستثناء السجل الحالي الذي نقوم بتحديثه)
-        $query = $variant->availabilities()->where('available_date', $date);
-        
-        if (!empty($availabilityData['id'])) {
-            $query->where('id', '!=', $availabilityData['id']);
-        }
-
-        if ($query->exists()) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'availabilities' => "التاريخ {$date} محجوز مسبقاً لهذا الـ Variant."
-            ]);
-        }
-
-        // 5. التحديث أو الإنشاء
-        if (!empty($availabilityData['id'])) {
-            $availability = $variant->availabilities()->findOrFail($availabilityData['id']);
-            $availability->update([
-                'available_date' => $date,
-                'is_blocked'     => $availabilityData['is_blocked'] ?? false,
-            ]);
-        } else {
-            $availability = $variant->availabilities()->create([
-                'id'             => (string) \Illuminate\Support\Str::ulid(),
-                'available_date' => $date,
-                'is_blocked'     => $availabilityData['is_blocked'] ?? false,
-            ]);
-        }
-
-        // 6. مزامنة الـ Slots الخاصة بهذا التاريخ
-        if (isset($availabilityData['slots'])) {
-            $this->syncSlots($availability, $availabilityData['slots']);
-        }
-    }
-}
-private function syncSlots($availability, array $slotsData)
-{
-    $sentSlotIds = collect($slotsData)->pluck('id')->filter()->toArray();
-
-    $availability->slots()
-        ->whereNotIn('id', $sentSlotIds)
-        ->forceDelete();
-
-    $formattedDate = Carbon::parse($availability->available_date)->format('Y-m-d');
-
-    foreach ($slotsData as $slotData) {
-
-        // ✅ بدون ترميز يدوي — مرر القيمة كما هي (array أو string)
-        $slotNameValue = $slotData['slot_name'] ?? $slotData['name'] ?? null;
-
-        $startTime = Carbon::parse($formattedDate . ' ' . $slotData['start_time'])->toDateTimeString();
-        $endTime   = Carbon::parse($formattedDate . ' ' . $slotData['end_time'])->toDateTimeString();
-
-        $availability->slots()->updateOrCreate(
-            ['id' => $slotData['id'] ?? null],
-            [
-                'slot_name'          => $slotNameValue,   // الـ cast يتولى الترميز
-                'start_time'         => $startTime,
-                'end_time'           => $endTime,
-                'remaining_capacity' => $slotData['remaining_capacity'] ?? 1,
-            ]
-        );
-    }
-}
     private function assertSlotsNotBooked(array $slotIds): void
     {
         // تم إزالة return; العشوائية التي كانت تعطل الدالة تماماً

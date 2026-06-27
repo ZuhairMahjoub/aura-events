@@ -14,9 +14,7 @@ use Illuminate\Support\Facades\Log;
 
 class ArrangementController extends Controller
 {
-    public function __construct(protected ArrangementService $arrangementService)
-    {
-    }
+    public function __construct(protected ArrangementService $arrangementService) {}
 
     // ────────────────────────────────────────────────────────────────────────────
     // Package CRUD
@@ -75,11 +73,13 @@ class ArrangementController extends Controller
     {
         $arrangement = Listing::where('listing_type', 'package')
             ->with([
-                'variants.packageItems.includedVariant.listing',
-                'variants.packageFreelancers.freelancer',
                 'images',
                 'category',
                 'district',
+                'variants.packageItems.includedVariant.images',
+                'variants.packageItems.includedVariant.listing',
+                'variants.packageFreelancers.freelancer',
+                'variants.availabilities.slots'
             ])
             ->find($arrangementId);
 
@@ -248,57 +248,59 @@ class ArrangementController extends Controller
         }
     }
     /**
- * GET /provider/my-arrangements
- * Retrieve a paginated list of all packages belonging to the authenticated company/provider.
- */
-/**
- * GET /provider/my-arrangements
- * Retrieve a paginated list of all packages belonging to the authenticated company/provider.
- */
-public function getMyPackages(Request $request): JsonResponse
-{
-    // جلب ملف المزود مباشرة بنفس أسلوبك الأصلي
-    $provider = $request->user()->providerProfile;
+     * GET /provider/my-arrangements
+     * Retrieve a paginated list of all packages belonging to the authenticated company/provider.
+     */
+    /**
+     * GET /provider/my-arrangements
+     * Retrieve a paginated list of all packages belonging to the authenticated company/provider.
+     */
+    public function getMyPackages(Request $request): JsonResponse
+    {
+        // جلب ملف المزود مباشرة بنفس أسلوبك الأصلي
+        $provider = $request->user()->providerProfile;
 
-    if (! $provider) {
-        return response()->json([
-            'success' => false,
-            'message' => 'ملف الشركة غير موجود.',
-        ], 403);
+        if (! $provider) {
+            return response()->json([
+                'success' => false,
+                'message' => 'ملف الشركة غير موجود.',
+            ], 403);
+        }
+
+        try {
+            $packages = Listing::where('listing_type', 'package')
+                ->where('provider_id', $provider->id)
+                ->with([
+                    'images',
+                    'category',
+                    'district',
+                    'variants.packageItems.includedVariant.images',
+                    'variants.packageItems.includedVariant.listing',
+                    'variants.packageFreelancers.freelancer',
+                    'variants.availabilities.slots'
+                ])
+                ->latest()
+                ->paginate($request->query('per_page', 15));
+
+            return response()->json([
+                'success' => true,
+                'meta'    => [
+                    'current_page' => $packages->currentPage(),
+                    'last_page'    => $packages->lastPage(),
+                    'total'        => $packages->total(),
+                ],
+                'data'    => ArrangementResource::collection($packages->items()),
+            ]);
+        } catch (Exception $e) {
+            Log::error('ArrangementController@getMyPackages failed', [
+                'provider_id' => $provider->id,
+                'error'       => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب الترتيبات الجاهزة الخاصة بشركتكم.',
+            ], 500);
+        }
     }
-
-    try {
-        // جلب الحزم المفلترة بـ provider_id الخاص بالشركة الحالية
-        $packages = Listing::where('listing_type', 'package')
-            ->where('provider_id', $provider->id)
-            ->with([
-                'images', 
-                'category', 
-                'district'
-            ])
-            ->latest()
-            ->paginate($request->query('per_page', 15));
-
-        return response()->json([
-            'success' => true,
-            'meta'    => [
-                'current_page' => $packages->currentPage(),
-                'last_page'    => $packages->lastPage(),
-                'total'        => $packages->total(),
-            ],
-            'data'    => ArrangementResource::collection($packages->items()),
-        ]);
-
-    } catch (Exception $e) {
-        Log::error('ArrangementController@getMyPackages failed', [
-            'provider_id' => $provider->id,
-            'error'       => $e->getMessage()
-        ]);
-
-        return response()->json([
-            'success' => false,
-            'message' => 'حدث خطأ أثناء جلب الترتيبات الجاهزة الخاصة بشركتكم.',
-        ], 500);
-    }
-}
 }

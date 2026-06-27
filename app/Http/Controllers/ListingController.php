@@ -33,8 +33,7 @@ public function getCompanyInventory(Request $request): JsonResponse
 
         // 1. جلب الصالات (Halls) مع علاقاتها الخاصة (مثل الحجوزات أو الميزات إن وجدت)
         $halls = Listing::where('provider_id', $provider->id)
-            ->where('listing_type', 'service') // أو النوع المعتمد لديك للصالات في الـ DB
-            ->with(['images', 'category', 'district', 'variants'])
+           ->with(['images', 'category', 'district', 'variants.images', 'variants.availabilities.slots'])->latest()
             ->get();
 
         // 2. جلب المنتجات المادية (Physical Products)

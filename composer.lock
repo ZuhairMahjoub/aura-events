@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "64f21ac0f4820ec19c285210d8165649",
+    "content-hash": "2a000ac5d9c422eb5af1889763f101cd",
     "packages": [
         {
             "name": "beste/clock",

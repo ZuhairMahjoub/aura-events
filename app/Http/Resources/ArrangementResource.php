@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
@@ -24,15 +23,21 @@ class ArrangementResource extends JsonResource
             'description'  => $this->description,
             'listing_type' => $this->listing_type, // always "package"
 
-            'category' => $this->whenLoaded('category', fn () => [
-                'id'   => $this->category->id,
-                'name' => $this->category->name ?? null,
-            ]),
-
-            'district' => $this->whenLoaded('district', fn () => [
-                'id'   => $this->district->id,
-                'name' => $this->district->name ?? null,
-            ]),
+            'category' => $this->whenLoaded('category', function () {
+        return [
+             'id' => $this->category->id,
+        // تأكدي من إرجاع الاسم باللغتين كما في المنتجات
+             'name_en' => $this->category->name_en ?? $this->category->name, 
+             'name_ar' => $this->category->name_ar ?? $this->category->name,
+               ];
+                            }),
+            'district' => $this->whenLoaded('district', function () {
+         return [
+            'id' => $this->district->id,
+            'name_en' => $this->district->name_en ?? $this->district->name,
+            'name_ar' => $this->district->name_ar ?? $this->district->name,
+               ];
+        }),
 
             'moderation_status' => $this->moderation_status,
 
@@ -44,40 +49,51 @@ class ArrangementResource extends JsonResource
             'capacity'   => $variant?->dynamic_attributes['capacity'] ?? null,
 
             // ── Package items (products / halls / services) ──────────────────
-            'items' => $this->whenLoaded('variants', function () use ($variant): array {
-                if (! $variant) {
-                    return [];
-                }
+           'items' => $this->whenLoaded('variants', function () use ($variant): array {
+        if (! $variant) {
+        return [];
+         }
 
-                return $variant->packageItems
-                    ->map(fn ($item) => [
-                        'id'         => $item->id,
-                        'variant_id' => $item->included_variant_id,
-                        'quantity'   => $item->quantity,
+    return $variant->packageItems
+        ->map(function ($item) {
+            // 💡 1. سحب الصورة من النسخة (اللون) مباشرة
+            $variantImageUrl = null;
+            if ($item->includedVariant && $item->includedVariant->relationLoaded('images') && $item->includedVariant->images->isNotEmpty()) {
+                // استخدمي asset() أو الطريقة التي تستخدمينها لعرض الروابط
+                $variantImageUrl = asset('storage/' . $item->includedVariant->images->first()->path); 
+            }
 
-                        'variant' => $item->includedVariant ? [
-                            'id'           => $item->includedVariant->id,
-                            'variant_name' => $item->includedVariant->variant_name,
-                            'price'        => (float) $item->includedVariant->price,
-                            'currency'     => $item->includedVariant->currency,
-                            'listing'      => $item->includedVariant->listing ? [
-                                'id'           => $item->includedVariant->listing->id,
-                                'title'        => $item->includedVariant->listing->title,
-                                'listing_type' => $item->includedVariant->listing->listing_type,
-                            ] : null,
-                        ] : null,
-                    ])
-                    ->values()
-                    ->toArray();
-            }),
+            return [
+                'id'         => $item->id,
+                'variant_id' => $item->included_variant_id,
+                'quantity'   => $item->quantity,
 
+                'variant' => $item->includedVariant ? [
+                    'id'           => $item->includedVariant->id,
+                    'variant_name' => $item->includedVariant->variant_name,
+                    'price'        => (float) $item->includedVariant->price,
+                    'currency'     => $item->includedVariant->currency,
+                    
+                    // 💡 2. إرفاق صورة اللون هنا
+                    'image'        => $variantImageUrl, 
+                    
+                    'listing'      => $item->includedVariant->listing ? [
+                        'id'           => $item->includedVariant->listing->id,
+                        'title'        => $item->includedVariant->listing->title,
+                        'listing_type' => $item->includedVariant->listing->listing_type,
+                    ] : null,
+                ] : null,
+            ];
+        })
+        ->values()
+        ->toArray();
+}),
             // ── Contract-linked freelancers ───────────────────────────────────
             'freelancers' => $this->whenLoaded('variants', function () use ($variant): array {
                 if (! $variant) {
                     return [];
                 }
-
-                return $variant->packageFreelancers
+return $variant->packageFreelancers
                     ->map(fn ($pf) => [
                         'id'            => $pf->id,
                         'freelancer_id' => $pf->freelancer_id,
@@ -99,7 +115,7 @@ class ArrangementResource extends JsonResource
                     'alt' => $img->alt_text
                 ])->values()->toArray()
                 : [],
-
+            'availabilities'           => $this->variants->first() ? $this->variants->first()->availabilities : [],
             // ── Cancellation policies ─────────────────────────────────────────
             'cancel_policies' => [
                 'before_acceptance' => (bool) $this->cancel_before_acceptance,

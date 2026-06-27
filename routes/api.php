@@ -1,4 +1,4 @@
-
+<?php
 use App\Http\Controllers\ArrangementController;
 use App\Http\Controllers\AdminListingController;
 use App\Http\Controllers\Auth\NewPasswordController;
@@ -20,6 +20,8 @@ use App\Http\Controllers\AdminProviderController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrganizerController;
 use App\Http\Controllers\ProviderController;
+use App\Http\Controllers\CompanyDetailController;
+
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'store']);

@@ -53,6 +53,13 @@ class ArrangementStoreRequest extends FormRequest
             // ── Images (temp paths from POST /uploads/temp) ──────────────────
             'images'   => 'nullable|array|max:10',
             'images.*' => 'string|regex:/^temp\/[a-zA-Z0-9\-_.]+$/',
+
+            'currency'   => 'required|string|size:3',
+            'availabilities'                       => 'nullable|array',
+            'availabilities.*.date'                => 'required_with:availabilities|date_format:Y-m-d',
+            'availabilities.*.slots'               => 'nullable|array',
+            'availabilities.*.slots.*.start_time'  => 'required_with:availabilities.*.slots|date_format:H:i',
+            'availabilities.*.slots.*.end_time'    => 'required_with:availabilities.*.slots|date_format:H:i',
         ];
     }
 
