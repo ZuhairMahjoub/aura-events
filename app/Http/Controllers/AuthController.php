@@ -81,12 +81,10 @@ public function getFilteredUsers(\Illuminate\Http\Request $request): \Illuminate
     try {
         $query = \App\Models\User::query();
 
-        // 1. الفلترة حسب الدور (provider, client, organizer) إذا تم إرساله
         if ($request->filled('role')) {
             $query->role($request->input('role'));
         }
 
-        // 2. الفلترة حسب حالة الحساب في الـ Profile (pending, approved, rejected)
         if ($request->filled('status')) {
             $status = $request->input('status');
             $query->whereHas('providerProfile', function ($q) use ($status) {
@@ -159,6 +157,15 @@ public function profile()
         'success' => true,
         'data' => $provider
     ]);
+}
+public function getProfile(Request $request)
+{
+    $user = $request->user()->load(['roles', 'providerProfile']); 
+
+    return response()->json([
+        'status' => 'success',
+        'data'   => $user
+    ], 200);
 }
 
     public function store(Request $request)
@@ -274,7 +281,7 @@ public function profile()
         }
 
         $user->tokens()->where('expires_at', '<', now())->delete();
-        $accessToken = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;
+        $accessToken = $user->createToken('access_token', ['access-api'], now()->addHours(24))->plainTextToken;
         $refreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
 
         $user->load('roles');
@@ -296,7 +303,7 @@ public function profile()
                 'user'          => $user,
                 'access_token'  => $accessToken,
                 'refresh_token' => $refreshToken,
-                'expires_in'    => 60 * 60, 
+                'expires_in'    => 60 * 60 * 24, 
             ]
         ], 200);
     }
@@ -431,7 +438,7 @@ public function profile()
 
         $user->tokens()->where('expires_at', '<', now())->delete();
 
-        $accessToken  = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;
+        $accessToken  = $user->createToken('access_token', ['access-api'], now()->addHours(24))->plainTextToken;
         $refreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
 
         $user->load('roles');
@@ -450,7 +457,7 @@ public function profile()
                 'user'          => $user,
                 'access_token'  => $accessToken,
                 'refresh_token' => $refreshToken,
-                'expires_in'    => 60 * 60,
+                'expires_in'    => 60 * 60 * 24,
             ]
         ], 200);
     }
@@ -470,7 +477,7 @@ public function profile()
         $user->tokens()->where('expires_at', '<', now())->delete();
         $currentToken->delete();
 
-        $newAccessToken  = $user->createToken('access_token', ['access-api'], now()->addHours(1))->plainTextToken;  
+        $newAccessToken  = $user->createToken('access_token', ['access-api'], now()->addHours(24))->plainTextToken;  
         $newRefreshToken = $user->createToken('refresh_token', ['issue-access-token'], now()->addDays(30))->plainTextToken;
 
         return response()->json([
@@ -478,7 +485,7 @@ public function profile()
             'data' => [
                 'access_token'  => $newAccessToken,
                 'refresh_token' => $newRefreshToken,
-                'expires_in'    => 60 * 60,
+                'expires_in'    => 60 * 60 * 24,
             ]
         ], 200);
     }
