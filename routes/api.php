@@ -104,14 +104,11 @@ Route::middleware('approved_provider')->group(function () {
 });
 Route::middleware('auth:sanctum')->group(function () {
 
-    // إنشاء حجز جديد
     Route::post('/bookings', [BookingController::class, 'store']);
 
-    // إلغاء حجز محدد
     Route::post('/bookings/{bookingId}/cancel', [BookingController::class, 'cancel']);
 
-    // يمكنك إضافة المزيد لاحقاً مثل:
-    Route::get('/bookings', [BookingController::class, 'index']); // عرض قائمة الحجوزات
+    Route::get('/bookings', [BookingController::class, 'index']); 
     Route::put('/bookings/{bookingId}/accept', [BookingController::class, 'accept'])
         ->middleware('approved_provider');
 });
@@ -146,7 +143,7 @@ Route::middleware(['auth:sanctum', 'approved_provider'])->group(function () {
     
     Route::get('/admin/providers', [ProviderController::class, 'index']);
 });
-// routes/api.php
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/chat/initialize', [ChatController::class, 'initializeChat']);
 });
+Route::get('/providers', [ProviderController::class, 'getProviders']);
