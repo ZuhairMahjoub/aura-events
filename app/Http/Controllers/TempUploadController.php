@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
@@ -25,7 +26,7 @@ class TempUploadController extends Controller
             'url'       => asset('storage/' . $tempPath)
         ], 201);
     }
-     public function index(string $listingId): JsonResponse
+    public function index(string $listingId): JsonResponse
     {
         $listing = Listing::find($listingId);
 
@@ -36,10 +37,10 @@ class TempUploadController extends Controller
             ], 404);
         }
 
-        $images = $listing->images->map(fn ($img) => [
+        $images = $listing->images->map(fn($img) => [
             'id'  => $img->id,
-            'url' => $img->url,  // الـ accessor في Image model
-            'alt' => $img->alt_text,
+            'url' => asset($img->path), // التعديل الآمن: يجلب الرابط كاملاً بالدومين المحلي أو الحقيقي للملف
+            'alt' => $img->alt_text
         ]);
 
         return response()->json([

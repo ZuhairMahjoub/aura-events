@@ -1,4 +1,5 @@
 <?php
+
 use App\Http\Controllers\ArrangementController;
 use App\Http\Controllers\AdminListingController;
 use App\Http\Controllers\Auth\NewPasswordController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\DistrictsController;
 use App\Http\Controllers\JobOfferController;
 use App\Http\Controllers\TempUploadController;
 use App\Http\Controllers\AdminProviderController;
+use App\Http\Controllers\CartController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrganizerController;
 use App\Http\Controllers\ProviderController;
@@ -79,7 +81,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::delete('/{listing}', [ListingController::class, 'destroy'])->middleware('permission:delete listings');
         });
     });
-Route::middleware('approved_provider')->group(function () {
+    Route::middleware('approved_provider')->group(function () {
         Route::post('/job-offers', [JobOfferController::class, 'store']);
         Route::get('/company/applicants', [JobOfferController::class, 'getApplicants']);
         Route::put('/contracts/{id}/status', [JobOfferController::class, 'updateApplicantStatus']);
@@ -97,23 +99,25 @@ Route::middleware('approved_provider')->group(function () {
             Route::get('/provider/my-arrangements', [ArrangementController::class, 'getMyPackages']); // API جديد
         });
 
-        Route::get('/provider/my-products', [ArrangementController::class, 'getMyProducts']);
+        // Route::get('/provider/my-products', [ArrangementController::class, 'getMyProducts']);
+        Route::get('provider/my-products', [ListingController::class, 'getCompanyProducts']);
         Route::get('/provider/available-freelancers', [ArrangementController::class, 'getFreelancersList']);
         Route::get('/job-offers', [JobOfferController::class, 'index']);
     });
 });
 Route::middleware('auth:sanctum')->group(function () {
 
-    // إنشاء حجز جديد
+    Route::get('book/{id}', [BookingController::class, 'show']);        // عرض تفاصيل حجز محدد (للطرفين)
     Route::post('/bookings', [BookingController::class, 'store']);
 
-    // إلغاء حجز محدد
-    Route::post('/bookings/{bookingId}/cancel', [BookingController::class, 'cancel']);
+    Route::put('/bookings/{bookingId}/cancel', [BookingController::class, 'cancel']);
 
-    // يمكنك إضافة المزيد لاحقاً مثل:
-    Route::get('/bookings', [BookingController::class, 'index']); // عرض قائمة الحجوزات
-    Route::put('/bookings/{bookingId}/accept', [BookingController::class, 'accept'])
-        ->middleware('approved_provider');
+    Route::get('/bookings', [BookingController::class, 'myBookings']); // عرض قائمة الحجوزات
+    Route::get('/provider/bookings', [BookingController::class, 'providerBookings']); // عرض قائمة الحجوزات
+
+    Route::put('/bookings/{bookingId}/accept', [BookingController::class, 'accept']);
+    Route::put('/bookings/{bookingId}/reject', [BookingController::class, 'reject']);
+    Route::put('/bookings/{bookingId}/complete', [BookingController::class, 'complete']);
 });
 
 
@@ -126,8 +130,6 @@ Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function
     Route::put('/listings/{id}/reject', [AdminListingController::class, 'reject']);
     Route::get('/providers/{id}', [AdminProviderController::class, 'showProvider']);
     Route::get('/Organzier/{id}', [AdminProviderController::class, 'getUserDetails']);
-    
-
 });
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -143,6 +145,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
 Route::middleware(['auth:sanctum', 'approved_provider'])->group(function () {
     Route::get('/provider/profile', [ProviderController::class, 'profile']);
-    
+
     Route::get('/admin/providers', [ProviderController::class, 'index']);
+});
+Route::middleware('auth:sanctum')->prefix('cart')->group(function () {
+    Route::get('/', [CartController::class, 'show']);
+    Route::post('/items', [CartController::class, 'addItem']);
+    Route::patch('/items/{cartItemId}', [CartController::class, 'updateQuantity']);
+    Route::delete('/items/{cartItemId}', [CartController::class, 'removeItem']);
+    Route::post('/checkout', [CartController::class, 'checkout']);
 });

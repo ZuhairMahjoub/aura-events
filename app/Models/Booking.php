@@ -13,6 +13,7 @@ class Booking extends Model
 
     // أضف هذه المصفوفة إلى الموديل
     protected $fillable = [
+
         'user_id',
         'provider_id',
         'listing_id',
@@ -56,4 +57,13 @@ class Booking extends Model
     }
     public function user() {
         return $this->belongsTo(User::class);  }
+            /**
+     * تحويل بيانات الطلب إلى DTO.
+     * هذا هو الحل للخطأ الذي يظهر لك حالياً.
+     */
+    public static function fromRequest(array $validated, string $userId): \App\DTOs\BookingData
+    {
+        return \App\DTOs\BookingData::fromRequest($validated, $userId);
+    }
+
 }

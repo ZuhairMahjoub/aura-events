@@ -205,11 +205,11 @@ class ListingService
         });
     }
 
-    public function deleteListing(Listing $listing): bool
-    {
-        return $listing->delete();
-    }
-
+  public function deleteListing(Listing $listing): bool
+{
+    // 1. فحص وجود حجوزات مرتبطة (سواء كانت نشطة أو تاريخية)
+    return (bool) $listing->forceDelete();
+}
     private function buildVariantPayload(array $variantData, $existingVariant = null): array
     {
         $payload = [];
@@ -351,28 +351,38 @@ class ListingService
             }
         }
     }
+   
+   
     private function syncSlots($availability, array $slotsData)
     {
         $sentSlotIds = collect($slotsData)->pluck('id')->filter()->toArray();
 
-        $availability->slots()
+        // IDs المراد حذفها
+        $toDeleteIds = $availability->slots()
             ->whereNotIn('id', $sentSlotIds)
+            ->pluck('id')
+            ->toArray();
+
+        // ✅ فحص الحجوزات النشطة قبل الحذف (إصلاح 3.5 / 1.10)
+        $this->assertSlotsNotBooked($toDeleteIds);
+
+        $availability->slots()
+            ->whereIn('id', $toDeleteIds)
             ->forceDelete();
 
-        $formattedDate = Carbon::parse($availability->available_date)->format('Y-m-d');
+        $formattedDate = \Carbon\Carbon::parse($availability->available_date)->format('Y-m-d');
 
         foreach ($slotsData as $slotData) {
 
-            // ✅ بدون ترميز يدوي — مرر القيمة كما هي (array أو string)
             $slotNameValue = $slotData['slot_name'] ?? $slotData['name'] ?? null;
 
-            $startTime = Carbon::parse($formattedDate . ' ' . $slotData['start_time'])->toDateTimeString();
-            $endTime   = Carbon::parse($formattedDate . ' ' . $slotData['end_time'])->toDateTimeString();
+            $startTime = \Carbon\Carbon::parse($formattedDate . ' ' . $slotData['start_time'])->toDateTimeString();
+            $endTime   = \Carbon\Carbon::parse($formattedDate . ' ' . $slotData['end_time'])->toDateTimeString();
 
             $availability->slots()->updateOrCreate(
                 ['id' => $slotData['id'] ?? null],
                 [
-                    'slot_name'          => $slotNameValue,   // الـ cast يتولى الترميز
+                    'slot_name'          => $slotNameValue,
                     'start_time'         => $startTime,
                     'end_time'           => $endTime,
                     'remaining_capacity' => $slotData['remaining_capacity'] ?? 1,
@@ -380,22 +390,25 @@ class ListingService
             );
         }
     }
-    private function assertSlotsNotBooked(array $slotIds): void
-    {
-        // تم إزالة return; العشوائية التي كانت تعطل الدالة تماماً
-        if (empty($slotIds)) return;
 
-        // ⚠️ الكود معلق حالياً كما اتفقنا حتى تقوم بإنشاء جدول الـ orders الفعلي في النظام
-        // // تأكد من أن اسم الجدول هنا ('orders') يطابق جدول الحجوزات الفعلي في نظامك
-        // $hasActiveOrders = DB::table('orders') 
-        //     ->whereIn('listing_slot_id', $slotIds)
-        //     ->whereIn('status', ['pending', 'accepted', 'confirmed'])
-        //     ->exists();
 
-        // if ($hasActiveOrders) {
-        //     throw new Exception('لا يمكن تعديل أو حذف الساعات المختارة لوجود حجوزات مؤكدة أو معلقة.');
-        // }
+   private function assertSlotsNotBooked(array $slotIds): void
+{
+    if (empty($slotIds)) {
+        return;
     }
+
+    $hasActiveBookings = \App\Models\Booking::whereIn('listing_slot_id', $slotIds)
+        ->whereIn('status', ['pending', 'accepted', 'confirmed'])
+        ->whereNull('deleted_at')
+        ->exists();
+
+    if ($hasActiveBookings) {
+        throw ValidationException::withMessages([
+            'slots' => 'لا يمكن تعديل أو حذف الأوقات المحددة لوجود حجوزات نشطة أو معلقة مرتبطة بها.',
+        ]);
+    }
+}
 
     private function assertNoOverlap($existingSlots, array $newSlot): void
     {
