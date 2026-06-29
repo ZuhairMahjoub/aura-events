@@ -16,6 +16,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
 
 class User extends Authenticatable implements AuthCanResetPassword
 {
@@ -144,6 +146,11 @@ public function bookings()
     public function notifications(){
         return $this->hasMany(Notification::class);
     }
+     public function cartItems(): HasMany
+    {
+        return $this->hasMany(CartItem::class);
+    }
+
     public function chatRooms()
 {
     return $this->belongsToMany(ChatRoom::class, 'chat_room_participants', 'user_id', 'chat_room_id');

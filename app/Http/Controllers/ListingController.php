@@ -7,6 +7,7 @@ use App\Http\Resources\ArrangementResource;
 use App\Models\Listing;
 use App\Services\ListingService;
 use App\Http\Resources\ListingResource;
+use Exception;
 use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Http\JsonResponse;
@@ -33,8 +34,7 @@ public function getCompanyInventory(Request $request): JsonResponse
 
         // 1. جلب الصالات (Halls) مع علاقاتها الخاصة (مثل الحجوزات أو الميزات إن وجدت)
         $halls = Listing::where('provider_id', $provider->id)
-            ->where('listing_type', 'service') // أو النوع المعتمد لديك للصالات في الـ DB
-            ->with(['images', 'category', 'district', 'variants'])
+           ->with(['images', 'category', 'district', 'variants.images', 'variants.availabilities.slots'])->latest()
             ->get();
 
         // 2. جلب المنتجات المادية (Physical Products)
@@ -120,20 +120,34 @@ public function getCompanyInventory(Request $request): JsonResponse
 }
 
     
-    public function destroy(Listing $listing): JsonResponse
-    {
-        Gate::authorize('delete', $listing);
 
+public function destroy(Listing $listing): JsonResponse
+{
+    Gate::authorize('delete', $listing);
+
+    try {
         $this->listingService->deleteListing($listing);
-
+        
         return response()->json([
             'success' => true,
-            'message' => 'Listing soft-deleted successfully.'
+            'message' => 'Listing deleted successfully.'
         ], Response::HTTP_OK);
-    }
+        
+    } catch (Exception $e) {
+        if ($e->getCode() == '23000') {
+            return response()->json([
+                'success' => false,
+                'message' => 'لا يمكن حذف هذه الفعالية لوجود حجوزات مرتبطة بها مسبقاً.'
+            ], Response::HTTP_CONFLICT); }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'حدث خطأ غير متوقع أثناء محاولة الحذف.'
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }}
+
     public function show(string $id, Request $request)
     {
-        // 1. جلب الـ Listing مع جميع العلاقات المطلوبة
         $listing = Listing::with([
             'images', 
             'variants.packageItems.includedVariant.listing',
@@ -142,18 +156,61 @@ public function getCompanyInventory(Request $request): JsonResponse
             'district'
         ])->findOrFail($id);
 
-        // 2. التحقق من الصلاحية (أن الـ Listing يتبع الـ Provider الخاص بالمستخدم)
-        // ملاحظة: افترضنا أن المستخدم لديه علاقة provider()
-        // if ($listing->provider_id !== $request->user()->provider_id) {
-        //     return response()->json(['message' => 'غير مصرح لك بالوصول لهذه البيانات'], 403);
-        // }
-
-        // 3. إرجاع البيانات
+     
         return response()->json([
             'status' => 'success',
             'data' => $listing
         ]);
     }
+    /**
+ * GET /provider/my-products
+ * جلب المنتجات المادية (Physical Products) الخاصة بالشركة الحالية فقط
+ */
+public function getCompanyProducts(Request $request): JsonResponse
+{
+    // 1. جلب ملف المزود الحالي والتحقق من وجوده
+    $provider = $request->user()->providerProfile;
+
+    if (!$provider) {
+        return response()->json([
+            'success' => false,
+            'message' => 'ملف الشركة غير موجود.',
+        ], 403);
+    }
+
+    try {
+        // 2. تصفية النتائج بناءً على معرف الشركة ونوع الـ listing ليجلب المنتجات المادية فقط
+        $products = Listing::where('provider_id', $provider->id)
+            ->where('listing_type', 'physical_product') 
+            ->with(['images', 'category', 'district', 'variants']) // شحن العلاقات المسبق للأداء المنظم
+            ->latest()
+            ->paginate($request->query('per_page', 15));
+
+        // 3. إرجاع البيانات منسقة عبر الـ Resource مع الـ Pagination Meta
+        return response()->json([
+            'success' => true,
+            'meta'    => [
+                'current_page' => $products->currentPage(),
+                'last_page'    => $products->lastPage(),
+                'total'        => $products->total(),
+                'per_page'     => $products->perPage(),
+            ],
+            'data'    => ListingResource::collection($products),
+        ], Response::HTTP_OK);
+
+    } catch (\Exception $e) {
+        // 4. تسجيل أي خطأ غير متوقع في الـ Log لتسهيل معالجته ومراقبته
+        \Illuminate\Support\Facades\Log::error('ListingController@getCompanyProducts failed', [
+            'provider_id' => $provider->id,
+            'error'       => $e->getMessage()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'حدث خطأ أثناء جلب المنتجات الخاصة بشركتكم.',
+        ], 500);
+    }
+}
     /**
  * GET /provider/my-services
  * جلب الخدمات والصـالات الخاصة بالشركة الحالية فقط

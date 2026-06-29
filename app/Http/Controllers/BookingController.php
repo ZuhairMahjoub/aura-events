@@ -9,6 +9,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Models\Booking;
 use Illuminate\Support\Facades\Gate;
+use App\Http\Resources\BookingResource;
+use Illuminate\Support\Facades\DB;
 
 class BookingController extends Controller
 {
@@ -51,34 +53,117 @@ class BookingController extends Controller
         ]);
     }
 
-    public function index(Request $request): JsonResponse
+    public function myBookings(Request $request): JsonResponse
     {
+        // 1. استقبال الفلاتر التي قد يرسلها اليوزر
         $filters = $request->only(['status', 'booking_type']);
 
+        // 2. جلب الحجوزات الخاصة باليوزر الحالي (الأورجانيزر)
         $bookings = $this->bookingService->getUserBookings(
             $request->user()->id,
             $filters,
             $request->input('per_page', 15)
         );
 
-        return response()->json([
-            'success' => true,
-            'data'    => $bookings,
-        ]);
+        // 3. إرجاع النتيجة مع الحفاظ على هيكلية الـ Pagination
+        return response()->json(
+            array_merge(
+                [
+                    'success' => true,
+                    'message' => 'تم استرجاع حجوزاتك بنجاح.'
+                ],
+                BookingResource::collection($bookings)->response()->getData(true)
+            )
+        );
     }
     public function accept(string $bookingId): JsonResponse
-{
-    $booking = \App\Models\Booking::findOrFail($bookingId);
-    Gate::authorize('accept', $booking);
+    {
+        $booking = \App\Models\Booking::findOrFail($bookingId);
+        Gate::authorize('accept', $booking);
 
-    $providerId = request()->user()->providerProfile->id;
+        $providerId = request()->user()->providerProfile->id;
 
-    $booking = $this->bookingService->accept($bookingId, $providerId);
+        $booking = $this->bookingService->accept($bookingId, $providerId);
 
-    return response()->json([
-        'success' => true,
-        'message' => 'تم قبول الحجز بنجاح.',
-        'data'    => $booking,
-    ]);
-}
+        return response()->json([
+            'success' => true,
+            'message' => 'تم قبول الحجز بنجاح.',
+            'data'    => $booking,
+        ]);
+    }
+    public function providerBookings(Request $request): JsonResponse
+    {
+        // 1. التحقق من أن المستخدم يملك بروفايل مزود خدمة
+        if (!$request->user()->providerProfile) {
+            return response()->json([
+                'success' => false,
+                'message' => 'عذراً، هذا الحساب ليس حساب مزود خدمة.'
+            ], 403);
+        }
+
+        // 2. جلب معرف المزود من العلاقة
+        $providerId = $request->user()->providerProfile->id;
+
+        // 3. استقبال الفلاتر (مثل الستيتس ونوع الحجز)
+        $filters = $request->only(['status', 'booking_type']);
+
+        // 4. استدعاء السيرفيس لجلب البيانات المفلترة والمقسمة لصفحات
+        $bookings = $this->bookingService->getProviderBookings(
+            $providerId,
+            $filters,
+            $request->input('per_page', 15)
+        );
+
+        // 5. إرجاع الاستجابة بصيغة JSON مع الـ Pagination والـ Resource
+        return response()->json(
+            array_merge(
+                [
+                    'success' => true,
+                    'message' => 'تم استرجاع حجوزات مزود الخدمة بنجاح.'
+                ],
+                BookingResource::collection($bookings)->response()->getData(true)
+            )
+        );
+    }
+    public function show(string $id): JsonResponse
+    {
+        $booking = \App\Models\Booking::findOrFail($id);
+        Gate::authorize('view', $booking); // يجب أن تسمح الـ Policy للمنظم والمزود الخاص بالحجز برؤيته
+
+        return response()->json([
+            'success' => true,
+            'data'    => new BookingResource($booking),
+        ]);
+    }
+    public function complete(string $bookingId): JsonResponse
+    {
+        $booking = \App\Models\Booking::findOrFail($bookingId);
+        Gate::authorize('complete', $booking); // تأكد من حمايتها في الـ Policy
+
+        $booking = $this->bookingService->complete($bookingId);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم تغيير حالة الحجز إلى مكتمل بنجاح.',
+            'data'    => $booking,
+            'completed_at' => now()
+        ]);
+    }
+    public function reject(string $bookingId, string $providerId, ?string $reason): Booking
+    {
+        return DB::transaction(function () use ($bookingId, $providerId, $reason) {
+            $booking = Booking::findOrFail($bookingId);   // ⚠️ بدون lockForUpdate
+
+            Gate::authorize('reject', $booking); // تأكد من إضافة دالة reject في الـ BookingPolicy
+
+            $booking->update([
+                'status' => 'rejected',
+                'cancelled_by' => 'provider',
+                'cancellation_reason' => $reason,
+                'rejected_at' => now()   // ⚠️ عمود غير موجود
+            ]);
+
+            return $booking;   // ⚠️ لا استدعاء لـ releaseCapacity() نهائياً!
+        });
+    }
 }

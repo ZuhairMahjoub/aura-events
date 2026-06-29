@@ -5,6 +5,7 @@ namespace App\Services\Booking;
 
 use App\Contracts\BookingStrategyInterface;
 use App\Services\Booking\Strategies\HallBookingStrategy;
+use App\Services\Booking\Strategies\PackageBookingStrategy;
 use App\Services\Booking\Strategies\PhysicalProductBookingStrategy;
 use App\Services\Booking\Strategies\ServiceBookingStrategy;
 use InvalidArgumentException;
@@ -20,7 +21,7 @@ class BookingStrategyFactory
         'physical_product' => PhysicalProductBookingStrategy::class,
         'hall'             => HallBookingStrategy::class,
         'service'          => ServiceBookingStrategy::class,
-        // 'package'          => PackageBookingStrategy::class, // مستقبلاً
+        'package'          => PackageBookingStrategy::class, // مستقبلاً
     ];
 
     public function make(string $bookingType): BookingStrategyInterface
