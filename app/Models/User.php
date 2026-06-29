@@ -92,6 +92,10 @@ public function provider()
     // المعامل الثاني هو اسم العمود الموجود في جدول providers والذي يربطه بالـ users
     return $this->hasOne(Provider::class, 'user_id'); 
 }
+public function isProvider(): bool
+{
+    return $this->provider()->exists();
+}
    
     public function hasVerifiedPhone(): bool
     {
@@ -146,4 +150,9 @@ public function bookings()
     {
         return $this->hasMany(CartItem::class);
     }
+
+    public function chatRooms()
+{
+    return $this->belongsToMany(ChatRoom::class, 'chat_room_participants', 'user_id', 'chat_room_id');
+}
 }

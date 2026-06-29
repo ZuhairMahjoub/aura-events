@@ -93,4 +93,18 @@ class ProviderController extends Controller
         'data' => $providers
     ], 200);
 }
+public function getProviders()
+{
+    $providers = Provider::paginate(15);
+
+    $providers->getCollection()->transform(function ($provider) {
+        return [
+            'id'    => (string) $provider->id,
+            'name'  => $provider->brand_name,
+            'type'  => $provider->provider_type,
+        ];
+    });
+
+    return response()->json($providers, 200);
+}
 }

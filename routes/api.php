@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ArrangementController;
 use App\Http\Controllers\AdminListingController;
 use App\Http\Controllers\Auth\NewPasswordController;
@@ -44,6 +45,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
             return $request->user();
         });
         Route::post('/logout', [AuthController::class, 'logout']);
+         Route::get('/auth/profile', [AuthController::class, 'getProfile']);
     });
 });
 
@@ -118,6 +120,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/bookings/{bookingId}/accept', [BookingController::class, 'accept']);
     Route::put('/bookings/{bookingId}/reject', [BookingController::class, 'reject']);
     Route::put('/bookings/{bookingId}/complete', [BookingController::class, 'complete']);
+    Route::post('/bookings', [BookingController::class, 'store']);
+
+    Route::post('/bookings/{bookingId}/cancel', [BookingController::class, 'cancel']);
+
+    Route::get('/bookings', [BookingController::class, 'index']); 
+    Route::put('/bookings/{bookingId}/accept', [BookingController::class, 'accept'])
+        ->middleware('approved_provider');
 });
 
 
@@ -155,3 +164,7 @@ Route::middleware('auth:sanctum')->prefix('cart')->group(function () {
     Route::delete('/items/{cartItemId}', [CartController::class, 'removeItem']);
     Route::post('/checkout', [CartController::class, 'checkout']);
 });
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/chat/initialize', [ChatController::class, 'initializeChat']);
+});
+Route::get('/providers', [ProviderController::class, 'getProviders']);
