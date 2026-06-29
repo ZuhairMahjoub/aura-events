@@ -111,7 +111,7 @@ return $variant->packageFreelancers
             'images' => $this->relationLoaded('images')
                 ? $this->images->map(fn($img) => [
                     'id'  => $img->id,
-                    'url' => asset($img->path), // التعديل الآمن: يجلب الرابط كاملاً بالدومين المحلي أو الحقيقي للملف
+                    'url' => $img->fullurl, // التعديل الآمن: يجلب الرابط كاملاً بالدومين المحلي أو الحقيقي للملف
                     'alt' => $img->alt_text
                 ])->values()->toArray()
                 : [],

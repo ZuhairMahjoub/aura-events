@@ -13,30 +13,28 @@ class ListingAvailability extends Model
     use HasUlids, HasFactory;
 
     protected $keyType = 'string';
-public $incrementing = false;
+    public $incrementing = false;
+
+    // Fix #6: Removed unused fields not in the migration
+    // (end_date, start_time, end_time, remaining_capacity)
     protected $fillable = [
-        'listing_variant_id', 
-        'available_date', 
-        'end_date',
-        'start_time', 
-        'end_time', 
-        'remaining_capacity', 
-        'is_blocked'
+        'listing_variant_id',
+        'available_date',
+        'is_blocked',
     ];
 
     protected $casts = [
         'available_date' => 'date',
-        'end_date'       => 'date',
         'is_blocked'     => 'boolean',
     ];
 
-   
     public function variant(): BelongsTo
     {
         return $this->belongsTo(ListingVariant::class, 'listing_variant_id');
     }
-    public function slots()
+
+    public function slots(): HasMany
     {
         return $this->hasMany(ListingSlot::class, 'listing_availability_id');
-    }   
+    }
 }

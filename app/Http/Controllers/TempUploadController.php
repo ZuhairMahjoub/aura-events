@@ -39,7 +39,7 @@ class TempUploadController extends Controller
 
         $images = $listing->images->map(fn($img) => [
             'id'  => $img->id,
-            'url' => asset($img->path), // التعديل الآمن: يجلب الرابط كاملاً بالدومين المحلي أو الحقيقي للملف
+            'url' => $img->url, // يستخدم الـ accessor من الـ model
             'alt' => $img->alt_text
         ]);
 

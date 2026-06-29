@@ -4,8 +4,6 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-// 1. تأكد من استدعاء الفيساد في الأعلى
-use Illuminate\Support\Facades\Storage; 
 
 class ListingResource extends JsonResource
 {
@@ -13,11 +11,10 @@ class ListingResource extends JsonResource
     {
         return [
             'id'                         => $this->id,
-            'title'                      => $this->title, 
-            'description'                => $this->description, 
+            'title'                      => $this->title,
+            'description'                => $this->description,
             'type'                       => $this->listing_type,
             'status'                     => $this->moderation_status,
-            
             'material_composition'       => $this->material_composition,
             'secondary_contact_number'   => $this->secondary_contact_number,
             'cancel_before_acceptance'   => (bool) $this->cancel_before_acceptance,
@@ -26,35 +23,30 @@ class ListingResource extends JsonResource
             'is_provider_location_based' => (bool) $this->is_provider_location_based,
             'rejection_reason'           => $this->rejection_reason,
 
-            'category'                   => $this->relationLoaded('category') && $this->category
-                ? [
-                    'id'   => $this->category->id,
-                    'name' => $this->category->name_en,
-                ]
+            'category' => $this->relationLoaded('category') && $this->category
+                ? ['id' => $this->category->id, 'name' => $this->category->name_en]
                 : null,
 
-            'district'                   => $this->relationLoaded('district') && $this->district
-                ? [
-                    'id'   => $this->district->id,
-                    'name' => $this->district->name_en,
-                ]
+            'district' => $this->relationLoaded('district') && $this->district
+                ? ['id' => $this->district->id, 'name' => $this->district->name_en]
                 : null,
-               'company' => $this->relationLoaded('provider') && $this->provider
+
+            'company' => $this->relationLoaded('provider') && $this->provider
                 ? [
                     'id'   => $this->provider->id,
-                    // قم بتغيير 'company_name' إلى اسم العمود الفعلي في جدول المستخدمين
-'name' => trim($this->provider->user->first_name . ' ' . $this->provider->user->last_name),                ]
+                    'name' => trim($this->provider->user->first_name . ' ' . $this->provider->user->last_name),
+                ]
                 : null,
 
-            // ✨ تحديث الصور الأساسية هنا
-            'images'                     => $this->relationLoaded('images') 
-                 ? $this->images->map(fn($img) => [
-        'url' => $img->url, // ✨ قمنا بإرجاعها بسيطة كما كانت، والموديل سيتولى الباقي تلقائياً!
-        'alt' => $img->alt_text
-    ])
-    : [],
+            'images' => $this->relationLoaded('images')
+                ? $this->images->map(fn($img) => [
+                    'id'  => $img->id,
+                    'url' => $img->full_url,
+                    'alt' => $img->alt_text,
+                ])
+                : [],
 
-            'variants'                   => $this->relationLoaded('variants') 
+            'variants' => $this->relationLoaded('variants')
                 ? $this->variants->map(fn($variant) => [
                     'id'         => $variant->id,
                     'name'       => $variant->variant_name,
@@ -63,15 +55,14 @@ class ListingResource extends JsonResource
                     'price_type' => $variant->price_type,
                     'stock'      => $variant->stock_quantity,
                     'attributes' => $variant->dynamic_attributes,
-                    
-                    // ✨ تحديث صور الـ variants هنا
-                 'images' => $variant->relationLoaded('images')
-    ? $variant->images->map(fn($img) => [
-        'url' => $img->url, // ✨ قمنا بإرجاعها بسيطة كما كانت، والموديل سيتولى الباقي تلقائياً!
-        'alt' => $img->alt_text
-    ])
-    : [],
-                       
+
+                    'images' => $variant->relationLoaded('images')
+                        ? $variant->images->map(fn($img) => [
+                            'id'  => $img->id,
+                            'url' => $img->full_url,
+                            'alt' => $img->alt_text,
+                        ])
+                        : [],
 
                     'availabilities' => $variant->relationLoaded('availabilities')
                         ? $variant->availabilities->map(fn($availability) => [
@@ -79,7 +70,7 @@ class ListingResource extends JsonResource
                             'available_date' => $availability->available_date,
                             'is_blocked'     => (bool) $availability->is_blocked,
 
-                            'slots'          => $availability->relationLoaded('slots')
+                            'slots' => $availability->relationLoaded('slots')
                                 ? $availability->slots->map(fn($slot) => [
                                     'id'                 => $slot->id,
                                     'name'               => $slot->slot_name,
@@ -87,14 +78,14 @@ class ListingResource extends JsonResource
                                     'end_time'           => $slot->end_time,
                                     'remaining_capacity' => (int) $slot->remaining_capacity,
                                 ])
-                                : []
+                                : [],
                         ])
-                        : []
+                        : [],
                 ])
                 : [],
-            
-            'created_at'   => $this->created_at?->toIso8601String(),
-            'updated_at'   => $this->updated_at?->toIso8601String(),
+
+            'created_at' => $this->created_at?->toIso8601String(),
+            'updated_at' => $this->updated_at?->toIso8601String(),
         ];
     }
 }

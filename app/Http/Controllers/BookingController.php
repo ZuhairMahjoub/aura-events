@@ -149,21 +149,30 @@ class BookingController extends Controller
             'completed_at' => now()
         ]);
     }
-    public function reject(string $bookingId, string $providerId, ?string $reason): Booking
-    {
-        return DB::transaction(function () use ($bookingId, $providerId, $reason) {
-            $booking = Booking::findOrFail($bookingId);   // ⚠️ بدون lockForUpdate
+ public function reject(string $bookingId): JsonResponse
+{
+    return DB::transaction(function () use ($bookingId) {
+        // ✅ lockForUpdate لمنع race condition
+        $booking = Booking::lockForUpdate()->findOrFail($bookingId);
 
-            Gate::authorize('reject', $booking); // تأكد من إضافة دالة reject في الـ BookingPolicy
+        Gate::authorize('reject', $booking);
 
-            $booking->update([
-                'status' => 'rejected',
-                'cancelled_by' => 'provider',
-                'cancellation_reason' => $reason,
-                'rejected_at' => now()   // ⚠️ عمود غير موجود
-            ]);
+        $booking->update([
+            'status'              => 'rejected',
+            'cancelled_by'        => 'provider',
+            'cancellation_reason' => request()->input('reason'),
+        ]);
 
-            return $booking;   // ⚠️ لا استدعاء لـ releaseCapacity() نهائياً!
-        });
-    }
+        // ✅ إعادة الـ capacity للـ slot
+        if ($booking->slot) {
+            $booking->slot->increment('remaining_capacity');
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم رفض الحجز بنجاح.',
+            'data'    => $booking,
+        ]);
+    });
+}
 }
