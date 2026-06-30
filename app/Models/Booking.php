@@ -33,7 +33,6 @@ class Booking extends Model
         'cancelled_at',
         'cancellation_reason',
         'cancelled_by',
-        'payment_reference',
     ];
 
     // إذا كنت تستخدم JSON في metadata، يفضل إضافة هذا الكاست

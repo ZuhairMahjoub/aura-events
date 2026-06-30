@@ -10,11 +10,11 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * استراتيجية حجز الخدمات والصالات (Halls & Freelance Services)
- * 
+ *
  * تتعامل مع:
  * - الصالات (Halls): تحتاج slot زمني محدد
  * - خدمات الفريلانس (Services): تحتاج slot زمني محدد
- * 
+ *
  * كلاهما يعتمد على:
  * - listing_slot_id: الوقت المحدد
  * - booked_date: التاريخ
@@ -22,6 +22,8 @@ use Illuminate\Validation\ValidationException;
  */
 class ServiceBookingStrategy implements BookingStrategyInterface
 {
+    private ?ListingSlot $lockedSlot = null;
+
     public function validate(BookingData $data): void
     {
         // التحقق من وجود slot محدد
@@ -38,14 +40,24 @@ class ServiceBookingStrategy implements BookingStrategyInterface
             ]);
         }
 
-        // التحقق من عدم وجود حجز متعارض لنفس الخدمة في نفس اليوم والوقت
+        // إصلاح TOCTOU: فحص التعارض الفعلي نُقل إلى reserveCapacity() ليكون
+        // تحت lockForUpdate (راجع HallBookingStrategy لنفس النمط). الفحص
+        // هنا كان يحدث *قبل* أي lock، ما يسمح لطلبين متزامنين بتجاوز هذا
+        // الفحص معاً، فيتسابقان لاحقاً على remaining_capacity برسالة خطأ
+        // مضلِّلة ("الطاقة غير كافية" بدل "محجوز مسبقاً"). validate() هنا
+        // للتحقق البنيوي فقط.
+    }
+
+    public function reserveCapacity(BookingData $data): void
+    {
+        // ── Lock هو نقطة التزامن الوحيدة والحقيقية (TOCTOU-safe) ──────────
+        $slot = ListingSlot::lockForUpdate()->findOrFail($data->slotId);
+
+        // ── فحص التعارض داخل الـ Lock ────────────────────────────────────
         $overlapping = Booking::where('listing_variant_id', $data->variantId)
             ->where('booked_date', $data->bookedDate)
             ->whereIn('status', ['pending', 'accepted', 'confirmed'])
-            ->where(function ($q) use ($data) {
-                $q->whereNotNull('listing_slot_id')
-                  ->where('listing_slot_id', $data->slotId);
-            })
+            ->where('listing_slot_id', $data->slotId)
             ->exists();
 
         if ($overlapping) {
@@ -53,12 +65,6 @@ class ServiceBookingStrategy implements BookingStrategyInterface
                 'listing_slot_id' => 'هذا الـ Slot محجوز مسبقاً.',
             ]);
         }
-    }
-
-    public function reserveCapacity(BookingData $data): void
-    {
-        // LOCK الـ slot لمنع الحجز المتزامن
-        $slot = ListingSlot::lockForUpdate()->findOrFail($data->slotId);
 
         // التحقق من الطاقة الاستيعابية
         if ($slot->remaining_capacity < $data->quantity) {
@@ -69,20 +75,56 @@ class ServiceBookingStrategy implements BookingStrategyInterface
 
         // تخفيض الطاقة الاستيعابية
         $slot->decrement('remaining_capacity', $data->quantity);
+
+        // حفظ الـ slot المُقفَل لإعادة استخدامه في buildTimeSnapshot (تفادي N+1)
+        $this->lockedSlot = $slot->fresh();
     }
 
-    public function buildTimeSnapshot(BookingData $data): array
-    {
-        // جلب بيانات الـ slot للحصول على أوقات البداية والنهاية
-        $slot = ListingSlot::find($data->slotId);
+   public function buildTimeSnapshot(BookingData $data): array
+{
+    // جلب الـ slot مع علاقة الـ availability بناءً على الـ migrations الخاصة بك
+    // (تأكد أن اسم دالة العلاقة داخل موديل ListingSlot هو 'availability')
+    $slot = $this->lockedSlot ?? ListingSlot::with('availability')->find($data->slotId);
 
-        return [
-            'booked_date'       => $data->bookedDate,
-            'booked_start_time' => $slot?->start_time?->format('H:i:s'),
-            'booked_end_time'   => $slot?->end_time?->format('H:i:s'),
-        ];
+    // 1. التحقق من وجود الـ slot والـ availability المرتبطة به في قاعدة البيانات
+    if (!$slot || !$slot->availability) {
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'slot_id' => ['الفترة الزمنية المطلوبة غير موجودة أو غير متاحة حالياً.']
+        ]);
     }
 
+    // 2. حماية إضافية (من جدول availability): التأكد أن اليوم غير مغلق يدوياً من الـ Vendor
+    if ($slot->availability->is_blocked) {
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'booked_date' => ['عذراً، هذا اليوم تم إغلاقه من قبل مقدم الخدمة ولا يستقبل حجوزات.']
+        ]);
+    }
+
+    // 3. حماية إضافية (من جدول slots): التأكد من وجود سعة متبقية للحجز
+    if ($slot->remaining_capacity <= 0) {
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'slot_id' => ['عذراً، هذه الفترة ممتلئة بالكامل ولا يوجد مقاعد متبقية.']
+        ]);
+    }
+
+    // 4. التحقق الحاسم: مقارنة التاريخ المرسل مع الـ available_date في جدولك
+    // نقوم بعمل parse للتأكد من مطابقة الصيغة (Y-m-d) تماماً دون مشاكل كاستنج
+    $requestedDate = \Carbon\Carbon::parse($data->bookedDate)->format('Y-m-d');
+    $availableDate = \Carbon\Carbon::parse($slot->availability->available_date)->format('Y-m-d');
+
+    if ($requestedDate !== $availableDate) {
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'booked_date' => ['خطأ في البيانات: التاريخ المحدد لا يطابق يوم العرض الفعلي المتاح.']
+        ]);
+    }
+
+    // 5. إذا مرت كل التحققات بنجاح، يتم إنشاء السناب شوت بأمان
+    return [
+        'booked_date'       => $availableDate, // نأخذ التاريخ المؤكد والمضمون من قاعدة البيانات
+        'booked_start_time' => $slot->start_time, // الحقل كـ string مخزن بـ HH:MM:SS كما أصلحتها سابقاً
+        'booked_end_time'   => $slot->end_time,
+    ];
+}
     public function buildTypeMetadata(BookingData $data): array
     {
         return [

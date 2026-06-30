@@ -6,6 +6,7 @@ use App\Contracts\BookingStrategyInterface;
 use App\DTOs\BookingData;
 use App\Models\ListingVariant;
 use App\Models\ListingSlot;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -13,6 +14,8 @@ use Illuminate\Validation\ValidationException;
  * - 3.3: lockForUpdate صحيح على Variants (Lock جماعي مرتَّب لمنع Deadlock).
  * - 3.8: حماية من null في getFreelancersSnapshot.
  * - 3.9: withTrashed للكشف عن المكونات المحذوفة في validate().
+ * - جديد: قفل sub-slots الزمنية (hall/service) بترتيب ثابت لمنع Deadlock
+ *   بين باقات متزامنة تتشارك نفس الـ slots بترتيب معكوس.
  */
 class PackageBookingStrategy implements BookingStrategyInterface
 {
@@ -103,6 +106,41 @@ class PackageBookingStrategy implements BookingStrategyInterface
             ->get()
             ->keyBy('id');
 
+        // ── إصلاح Deadlock: العناصر الزمنية (hall/service) كانت تُقفَل
+        // واحدة تلو الأخرى داخل foreach بترتيب اعتباطي (ترتيب packageItems
+        // في الـ DB)، بعكس المنتجات المادية المُرتَّبة أبجدياً قبل القفل
+        // الجماعي. لو حجزت باقتان متزامنتان نفس مجموعة الـ sub-slots لكن
+        // بترتيب items معكوس، يحدث deadlock حقيقي بين الـ transactions.
+        // الحل: تحديد كل sub-slot IDs المطلوبة مسبقاً (بدون lock)، ترتيبها،
+        // ثم قفلها دفعة واحدة بنفس ترتيب القفل الجماعي للمنتجات المادية. ──
+        $timeDependentItems = $packageVariant->packageItems
+            ->filter(fn($item) => in_array($item->includedVariant->listing->listing_type, ['hall', 'service']));
+
+        $lockedSubSlots = collect();
+
+        if ($mainSlot && $timeDependentItems->isNotEmpty()) {
+            $subSlotIds = ListingSlot::whereHas('availability', function ($q) use ($timeDependentItems, $data) {
+                    $q->whereIn('listing_variant_id', $timeDependentItems->pluck('includedVariant.id'))
+                      ->where('available_date', $data->bookedDate);
+                })
+                ->where('start_time', $mainSlot->getRawOriginal('start_time'))
+                ->pluck('id')
+                ->sort()
+                ->values()
+                ->toArray();
+
+            if (! empty($subSlotIds)) {
+                $lockedSubSlots = ListingSlot::whereIn('id', $subSlotIds)
+                    ->with('availability:id,listing_variant_id')
+                    ->lockForUpdate()
+                    ->orderBy('id')
+                    ->get()
+                    ->keyBy(function ($slot) {
+                        return $slot->availability->listing_variant_id;
+                    });
+            }
+        }
+
         foreach ($packageVariant->packageItems as $item) {
             $variant     = $item->includedVariant;
             $type        = $variant->listing->listing_type;
@@ -121,11 +159,33 @@ class PackageBookingStrategy implements BookingStrategyInterface
                 $lockedVariant->decrement('stock_quantity', $requiredQty);
 
             } elseif (in_array($type, ['hall', 'service']) && $mainSlot) {
-                $this->reserveSubComponentSlotWithLock($variant, $data->bookedDate, $mainSlot, $data->quantity);
+                $this->reserveSubComponentSlotFromLocked($variant, $lockedSubSlots, $requiredQty);
             }
         }
     }
 
+    /**
+     * إصدار محدَّث يستخدم الـ sub-slot المُقفَل مسبقاً (بترتيب ثابت) بدل
+     * تنفيذ lockForUpdate منفصل لكل عنصر داخل الحلقة (إصلاح Deadlock أعلاه).
+     */
+    private function reserveSubComponentSlotFromLocked($variant, Collection $lockedSubSlots, int $requiredQty): void
+    {
+        $subSlot = $lockedSubSlots->get($variant->id);
+
+        if (!$subSlot || $subSlot->remaining_capacity < $requiredQty) {
+            throw ValidationException::withMessages([
+                'listing_slot_id' => "المكون [" . ($variant->variant_name['ar'] ?? $variant->variant_name) . "] غير متاح في وقت الباقة.",
+            ]);
+        }
+
+        $subSlot->decrement('remaining_capacity', $requiredQty);
+    }
+
+    /**
+     * @deprecated أُبقي عليها فقط في حال استُدعيت من مسار قديم خارجي؛
+     * المسار الفعلي الجديد يستخدم reserveSubComponentSlotFromLocked أعلاه
+     * ضمن قفل جماعي مرتَّب لمنع الـ Deadlock.
+     */
     private function reserveSubComponentSlotWithLock($variant, $date, $mainSlot, $quantity): void
     {
         $subSlot = ListingSlot::whereHas('availability', function ($q) use ($variant, $date) {
@@ -206,10 +266,11 @@ class PackageBookingStrategy implements BookingStrategyInterface
     {
         $slot = $data->slotId ? ListingSlot::find($data->slotId) : null;
 
+        // إصلاح حرج: start_time/end_time هما string جاهز، لا Carbon.
         return [
             'booked_date'       => $data->bookedDate,
-            'booked_start_time' => $slot?->start_time?->format('H:i:s'),
-            'booked_end_time'   => $slot?->end_time?->format('H:i:s'),
+            'booked_start_time' => $slot?->start_time,
+            'booked_end_time'   => $slot?->end_time,
         ];
     }
 }

@@ -68,13 +68,16 @@ class HallBookingStrategy implements BookingStrategyInterface
 
     public function buildTimeSnapshot(BookingData $data): array
     {
-        // إعادة استخدام الـ slot المُجلَب بدلاً من استعلام جديد (إصلاح 1.11)
         $slot = $this->lockedSlot ?? ListingSlot::find($data->slotId);
-
+$bookedDate = $slot?->availability?->available_date ?? $data->bookedDate;
+        // إصلاح حرج: start_time/end_time مُعرَّفان في ListingSlot::casts()
+        // كـ 'string' (مخزَّنان كـ "HH:MM:SS") وليس Carbon — استدعاء ->format()
+        // عليهما يرمي "Call to a member function format() on string" ويُفشل
+        // كل عملية حجز لصالة بشكل دائم.
         return [
-            'booked_date'       => $data->bookedDate,
-            'booked_start_time' => $slot?->start_time?->format('H:i:s'),
-            'booked_end_time'   => $slot?->end_time?->format('H:i:s'),
+            'booked_date'       => $bookedDate,
+            'booked_start_time' => $slot?->start_time,
+            'booked_end_time'   => $slot?->end_time,
         ];
     }
 
