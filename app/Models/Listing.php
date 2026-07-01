@@ -33,8 +33,7 @@ use HasUlids, HasFactory;
     'secondary_contact_number',
     'is_provider_location_based',
     'status',
-    'rejection_reason',
-];
+    'rejection_reason',];
 
     protected $casts = [
         'title' => 'array',

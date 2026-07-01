@@ -281,36 +281,22 @@ class BookingService
         return (float) $variant->price * $data->quantity;
     }
 
+    /**
+     * إصلاح حرج: كانت هذه الدالة تعتمد على match() صريح بقائمة أنواع مكرَّرة
+     * يدوياً من BookingStrategyFactory، مع 'default => null' صامت. النتيجة:
+     * حجز من نوع 'package' (والمسجّل أصلاً في الـ Factory) لم يكن له أي حالة
+     * هنا، فإلغاء/رفض حجز باقة لا يُعيد أي مخزون أو سعة سلوتات محجوزة
+     * لمكوناتها (منتجات + قاعات/خدمات) — تسرّب مخزون دائم مع كل إلغاء.
+     *
+     * الحل: التفويض الكامل لنفس الـ Strategy المسؤولة أصلاً عن الحجز
+     * (عبر release() الإلزامية على BookingStrategyInterface)، فلا يوجد بعد
+     * الآن مسار يسمح بإضافة نوع حجز جديد بالـ Factory دون تطبيق منطق
+     * تحريره أيضاً — الواجهة تفرض ذلك عبر PHP نفسها (Fatal Error عند عدم
+     * التطبيق)، لا "اتفاق ضمني" قابل للنسيان.
+     */
     private function releaseCapacity(Booking $booking): void
     {
-        match ($booking->booking_type) {
-            'physical_product' => $this->releasePhysicalProductCapacity($booking),
-            'hall'             => $this->releaseSlotCapacity($booking),
-            'service'          => $this->releaseSlotCapacity($booking),
-            default            => null,
-        };
-    }
-
-    private function releasePhysicalProductCapacity(Booking $booking): void
-    {
-        \App\Models\ListingVariant::lockForUpdate()
-            ->find($booking->listing_variant_id)
-            ?->increment('stock_quantity', $booking->quantity);
-
-        if ($booking->listing_slot_id) {
-            \App\Models\ListingSlot::lockForUpdate()
-                ->find($booking->listing_slot_id)
-                ?->increment('remaining_capacity', $booking->quantity);
-        }
-    }
-
-    private function releaseSlotCapacity(Booking $booking): void
-    {
-        if ($booking->listing_slot_id) {
-            \App\Models\ListingSlot::lockForUpdate()
-                ->find($booking->listing_slot_id)
-                ?->increment('remaining_capacity', $booking->quantity);
-        }
+        $this->strategyFactory->make($booking->booking_type)->release($booking);
     }
 
     private function assertCanBeCancelled(Booking $booking, string $cancelledBy): void

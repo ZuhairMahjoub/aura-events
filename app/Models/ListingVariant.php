@@ -25,6 +25,9 @@ class ListingVariant extends Model
         'price_type',
         'stock_quantity',
         'dynamic_attributes',
+            'currency',
+            'stock_quantity',
+
     ];
 
     protected $casts = [

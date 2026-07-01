@@ -4,6 +4,7 @@ namespace App\Services\Booking\Strategies;
 
 use App\Contracts\BookingStrategyInterface;
 use App\DTOs\BookingData;
+use App\Models\Booking;
 use App\Models\ListingVariant;
 use App\Models\ListingSlot;
 use Illuminate\Support\Collection;
@@ -33,6 +34,30 @@ class PackageBookingStrategy implements BookingStrategyInterface
                 'includedVariant' => fn($q2) => $q2->withTrashed()->with('listing'),
             ]),
         ])->findOrFail($data->variantId);
+
+        // إصلاح (Edge Case): إذا احتوت الباقة على مكوّن زمني (hall/service)
+        // ولم يُحدَّد slotId، فإن reserveCapacity() لا تملك أي وسيلة لقفل أو
+        // حجز ذلك المكوّن فعلياً (لا يوجد عمود سعة على ListingAvailability
+        // نفسها، فقط is_blocked) — ما كان يسمح بحجز نفس الباقة لعدة زبائن
+        // بنفس اليوم دون أي تعارض حقيقي. نمنع هذا المسار غير الآمن من الأساس
+        // بدل محاولة "تخمين" سعة غير موجودة.
+        $hasTimeDependentItems = $packageVariant->packageItems->contains(
+            fn($item) => $item->includedVariant
+                && !$item->includedVariant->trashed()
+                && in_array($item->includedVariant->listing->listing_type, ['hall', 'service'])
+        );
+
+        if ($hasTimeDependentItems && empty($data->slotId)) {
+            throw ValidationException::withMessages([
+                'listing_slot_id' => 'هذه الباقة تحتوي على مكونات زمنية (قاعة/خدمة)، يجب تحديد time slot لضمان حجز الوقت فعلياً ومنع التعارض مع حجوزات أخرى.',
+            ]);
+        }
+
+        // إصلاح (Edge Case): فحص أن الفريلانسرز المرتبطين بهذه الباقة غير
+        // مرتبطين بحجز باقة آخر فعّال (pending/accepted/confirmed) لنفس
+        // التاريخ. لا يوجد جدول حجوزات منفصل للفريلانسر، لذا نعتمد على
+        // الـ snapshot المخزَّن داخل metadata->booking_items لأي حجز سابق.
+        $this->validateFreelancersAvailability($packageVariant, $data->bookedDate);
 
         $mainSlot = $data->slotId ? ListingSlot::find($data->slotId) : null;
 
@@ -272,5 +297,116 @@ class PackageBookingStrategy implements BookingStrategyInterface
             'booked_start_time' => $slot?->start_time,
             'booked_end_time'   => $slot?->end_time,
         ];
+    }
+
+    /**
+     * فحص (Edge Case): يمنع ربط نفس الفريلانسر بباقتين تنحجزان لنفس التاريخ
+     * بحالة فعّالة (pending/accepted/confirmed). لا يوجد جدول حجوزات مستقل
+     * للفريلانسر، فنبحث ضمن metadata->booking_items للحجوزات السابقة من
+     * نوع 'package' (يعمل بفضل JSON_CONTAINS على MySQL — يدعم Containment
+     * الجزئي على عناصر الـ array، فلا حاجة لمطابقة كل المفاتيح).
+     */
+    private function validateFreelancersAvailability($packageVariant, ?string $bookedDate): void
+    {
+        if (empty($bookedDate)) {
+            return;
+        }
+
+        $packageVariant->loadMissing('packageFreelancers.freelancer');
+
+        $freelancerIds = $packageVariant->packageFreelancers
+            ->pluck('freelancer_id')
+            ->filter()
+            ->unique();
+
+        foreach ($freelancerIds as $freelancerId) {
+            $isBusy = Booking::where('booking_type', 'package')
+                ->where('booked_date', $bookedDate)
+                ->whereIn('status', ['pending', 'accepted', 'confirmed'])
+                ->whereJsonContains('metadata->booking_items', [
+                    'type'          => 'freelancer',
+                    'freelancer_id' => $freelancerId,
+                ])
+                ->exists();
+
+            if ($isBusy) {
+                throw ValidationException::withMessages([
+                    'package' => 'أحد الفريلانسرز ضمن هذه الباقة لديه حجز آخر فعّال بنفس التاريخ، لا يمكن تأكيد الحجز.',
+                ]);
+            }
+        }
+    }
+
+    /**
+     * عكس reserveCapacity(): تُستدعى من BookingService::releaseCapacity()
+     * عند الإلغاء/الرفض. نعتمد على الـ snapshot المخزَّن في
+     * metadata->booking_items وقت الحجز (وليس إعادة جلب packageItems
+     * الحالية) لأن مكوّنات الباقة قد تتغيّر لاحقاً عبر SyncPackageItemsAction؛
+     * يجب إعادة بالضبط ما خُصم وقتها، لا ما هو موجود بالباقة الآن.
+     */
+    public function release(Booking $booking): void
+    {
+        $bookingItems = collect($booking->metadata['booking_items'] ?? [])
+            ->filter(fn($entry) => ($entry['type'] ?? null) === 'item');
+
+        if ($bookingItems->isEmpty()) {
+            return;
+        }
+
+        $variantIds = $bookingItems->pluck('listing_variant_id')->unique()->sort()->values()->toArray();
+
+        // ── Lock جماعي مرتَّب لكل المكونات المادية (نفس منطق reserveCapacity) ──
+        $variants = ListingVariant::with('listing')
+            ->whereIn('id', $variantIds)
+            ->lockForUpdate()
+            ->orderBy('id')
+            ->get()
+            ->keyBy('id');
+
+        $timeDependentVariantIds = $bookingItems
+            ->filter(fn($entry) => !empty($entry['is_time_dependent']))
+            ->pluck('listing_variant_id')
+            ->unique()
+            ->values();
+
+        $lockedSubSlots = collect();
+
+        if ($booking->listing_slot_id && $timeDependentVariantIds->isNotEmpty()) {
+            $subSlotIds = ListingSlot::whereHas('availability', function ($q) use ($timeDependentVariantIds, $booking) {
+                    $q->whereIn('listing_variant_id', $timeDependentVariantIds)
+                      ->where('available_date', $booking->booked_date);
+                })
+                ->where('start_time', $booking->getRawOriginal('booked_start_time'))
+                ->pluck('id')
+                ->sort()
+                ->values()
+                ->toArray();
+
+            if (!empty($subSlotIds)) {
+                $lockedSubSlots = ListingSlot::whereIn('id', $subSlotIds)
+                    ->with('availability:id,listing_variant_id')
+                    ->lockForUpdate()
+                    ->orderBy('id')
+                    ->get()
+                    ->keyBy(fn($slot) => $slot->availability->listing_variant_id);
+            }
+        }
+
+        foreach ($bookingItems as $entry) {
+            $variant = $variants->get($entry['listing_variant_id']);
+
+            // المكوّن محذوف نهائياً من قاعدة البيانات؛ لا يوجد إليه شيء يُعاد.
+            if (!$variant) {
+                continue;
+            }
+
+            $quantity = (int) ($entry['quantity'] ?? 0);
+
+            if ($variant->listing?->listing_type === 'physical_product') {
+                $variant->increment('stock_quantity', $quantity);
+            } elseif (!empty($entry['is_time_dependent'])) {
+                $lockedSubSlots->get($variant->id)?->increment('remaining_capacity', $quantity);
+            }
+        }
     }
 }

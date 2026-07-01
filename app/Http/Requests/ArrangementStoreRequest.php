@@ -51,15 +51,28 @@ class ArrangementStoreRequest extends FormRequest
             'freelancers.*.contract_id'       => 'required_with:freelancers|string|exists:company_freelancer_contracts,id',
 
             // ── Images (temp paths from POST /uploads/temp) ──────────────────
-            'images'   => 'nullable|array|max:10',
-            'images.*' => 'string|regex:/^temp\/[a-zA-Z0-9\-_.]+$/',
-
+           'images.*'             => ['nullable', 'array'],
+            'images.*.id'          => ['nullable', 'string'],
+            'images.*.path'        => ['nullable', 'string'],
             'currency'   => 'required|string|size:3',
             'availabilities'                       => 'nullable|array',
             'availabilities.*.date'                => 'required_with:availabilities|date_format:Y-m-d',
             'availabilities.*.slots'               => 'nullable|array',
             'availabilities.*.slots.*.start_time'  => 'required_with:availabilities.*.slots|date_format:H:i',
             'availabilities.*.slots.*.end_time'    => 'required_with:availabilities.*.slots|date_format:H:i',
+            // داخل مصفوفة return [ ... ] في دالة rules()
+
+            'date_range'                             => 'nullable|array',
+            'date_range.start_date'                  => 'required_with:date_range|date_format:Y-m-d',
+            'date_range.end_date'                    => 'required_with:date_range|date_format:Y-m-d|after_or_equal:date_range.start_date',
+            'date_range.is_blocked'                  => 'boolean',
+            'date_range.slots'                       => 'nullable|array',
+            'date_range.slots.*.slot_name'           => 'required_with:date_range.slots|array',
+            'date_range.slots.*.slot_name.en'        => 'string|max:255',
+            'date_range.slots.*.slot_name.ar'        => 'string|max:255',
+            'date_range.slots.*.start_time'          => 'required_with:date_range.slots|date_format:H:i',
+            'date_range.slots.*.end_time'            => 'required_with:date_range.slots|date_format:H:i',
+            'date_range.slots.*.remaining_capacity'  => 'integer|min:0',
         ];
     }
 

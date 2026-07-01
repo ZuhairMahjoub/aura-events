@@ -117,7 +117,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/bookings', [BookingController::class, 'myBookings']); // عرض قائمة الحجوزات
     Route::get('/provider/bookings', [BookingController::class, 'providerBookings']); // عرض قائمة الحجوزات
 
-    Route::put('/bookings/{bookingId}/accept', [BookingController::class, 'accept']);
     Route::put('/bookings/{bookingId}/reject', [BookingController::class, 'reject']);
     Route::put('/bookings/{bookingId}/complete', [BookingController::class, 'complete']);
     Route::post('/bookings', [BookingController::class, 'store']);

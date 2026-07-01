@@ -191,4 +191,20 @@ class PhysicalProductBookingStrategy implements BookingStrategyInterface
             'price_type'       => $variant?->price_type ?? 'fixed', // حفظ نوع السعر للمرجعية
         ];
     }
+
+  
+    public function release(Booking $booking): void
+    {
+        $variant = ListingVariant::lockForUpdate()->find($booking->listing_variant_id);
+
+        if ($variant && $variant->stock_quantity !== null) {
+            $variant->increment('stock_quantity', $booking->quantity);
+        }
+
+        if ($booking->listing_slot_id) {
+            ListingSlot::lockForUpdate()
+                ->find($booking->listing_slot_id)
+                ?->increment('remaining_capacity', $booking->quantity);
+        }
+    }
 }

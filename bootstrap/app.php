@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class, 
             'approved_provider' => \App\Http\Middleware\EnsureUserIsApprovedProvider::class,           'abilities' => \Laravel\Sanctum\Http\Middleware\CheckAbilities::class,
             'ability' => \Laravel\Sanctum\Http\Middleware\CheckForAnyAbility::class,
+            'provider_type' => \App\Http\Middleware\EnsureProviderType::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

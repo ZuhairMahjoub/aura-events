@@ -89,4 +89,17 @@ $bookedDate = $slot?->availability?->available_date ?? $data->bookedDate;
             'setup_needs' => $data->metadata['setup_needs'] ?? null,
         ];
     }
+
+    /**
+     * عكس reserveCapacity(): إعادة السعة الاستيعابية للـ slot عند
+     * الإلغاء/الرفض. تُستدعى من BookingService::releaseCapacity().
+     */
+    public function release(Booking $booking): void
+    {
+        if ($booking->listing_slot_id) {
+            ListingSlot::lockForUpdate()
+                ->find($booking->listing_slot_id)
+                ?->increment('remaining_capacity', $booking->quantity);
+        }
+    }
 }
