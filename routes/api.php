@@ -24,6 +24,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrganizerController;
 use App\Http\Controllers\ProviderController;
 use App\Http\Controllers\CompanyDetailController;
+use App\Http\Controllers\FavoriteController;
 
 
 Route::prefix('auth')->group(function () {
@@ -45,7 +46,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
             return $request->user();
         });
         Route::post('/logout', [AuthController::class, 'logout']);
-         Route::get('/auth/profile', [AuthController::class, 'getProfile']);
+        Route::get('/auth/profile', [AuthController::class, 'getProfile']);
     });
 });
 
@@ -123,7 +124,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/bookings/{bookingId}/cancel', [BookingController::class, 'cancel']);
 
-    Route::get('/bookings', [BookingController::class, 'index']); 
+    Route::get('/bookings', [BookingController::class, 'index']);
     Route::put('/bookings/{bookingId}/accept', [BookingController::class, 'accept'])
         ->middleware('approved_provider');
 });
@@ -167,3 +168,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/chat/initialize', [ChatController::class, 'initializeChat']);
 });
 Route::get('/providers', [ProviderController::class, 'getProviders']);
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/favorites/{listingId}/toggle', [FavoriteController::class, 'toggle']);
+    Route::get('/favorites', [FavoriteController::class, 'index']);
+});
