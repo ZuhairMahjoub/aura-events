@@ -2,83 +2,127 @@
 
 namespace App\Actions\Arrangement;
 
+use App\Actions\Listing\BulkInsertSlotsAction;
 use App\Models\ListingVariant;
-use Carbon\Carbon;
-use Carbon\CarbonPeriod;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Support\Carbon;
+use Illuminate\Validation\ValidationException;
 
+/**
+ * مزامنة تواريخ/أوقات الباقة (Arrangement) بنفس منطق
+ * SyncVariantAvailabilitiesAction الخاص بالـ Listing:
+ * - مزامنة بالـ ID (إضافة/تعديل/حذف) بدل الحذف والإعادة الكاملة.
+ * - حماية التواريخ والـ Slots التي عليها حجوزات نشطة من الحذف.
+ * - منع تكرار نفس التاريخ لنفس الـ Variant.
+ */
 class SyncArrangementAvailabilitiesAction
 {
-    /**
-     * استبدال كامل لتواريخ/أوقات الباقة بناءً على نطاق زمني (Date Range).
-     */
-    public function execute(ListingVariant $variant, ?array $dateRange, int $defaultCapacity = 1): void
-    {
-        // 1. حذف المواعيد والفترات السابقة
-        $oldAvailabilityIds = $variant->availabilities()->pluck('id');
-        DB::table('listing_slots')->whereIn('listing_availability_id', $oldAvailabilityIds)->delete();
-        DB::table('listing_availabilities')->where('listing_variant_id', $variant->id)->delete();
+    public function __construct(private BulkInsertSlotsAction $bulkInsertSlotsAction) {}
 
-        // 2. التحقق من وجود بيانات النطاق الزمني
-        if (empty($dateRange) || empty($dateRange['start_date']) || empty($dateRange['end_date'])) {
-            return;
+    /**
+     * مزامنة قائمة تواريخ محدَّدة (كل عنصر قد يحمل id للحفاظ عليه).
+     */
+    public function execute(ListingVariant $variant, array $availabilitiesData, int $defaultCapacity = 1): void
+    {
+        // لا نفتح DB::transaction هنا — الـ transaction موجودة بالفعل
+        // في CreateArrangementAction/UpdateArrangementAction (نفس تعليق Listing).
+
+        // قفل صف الـ variant لمنع التعارض عند التحديث المتزامن (Fix #5 من Listing)
+        $variant = ListingVariant::lockForUpdate()->findOrFail($variant->id);
+
+        $sentIds = collect($availabilitiesData)->pluck('id')->filter()->values()->toArray();
+        $toDelete = $variant->availabilities()->whereNotIn('id', $sentIds)->get();
+
+        foreach ($toDelete as $availability) {
+            foreach ($availability->slots as $slot) {
+                $activeBookings = $slot->bookings()
+                    ->whereNotIn('status', ['cancelled', 'rejected'])
+                    ->count();
+
+                if ($activeBookings > 0) {
+                    throw ValidationException::withMessages([
+                        'availabilities' => "لا يمكن حذف التاريخ {$availability->available_date} لوجود {$activeBookings} حجز نشط.",
+                    ]);
+                }
+            }
         }
 
-        $availabilityRows = [];
-        $slotRows = [];
+        $variant->availabilities()->whereNotIn('id', $sentIds)->delete();
 
-        // 3. تحديد نطاق الأيام باستخدام CarbonPeriod
-        $startDate = Carbon::parse($dateRange['start_date']);
-        $endDate   = Carbon::parse($dateRange['end_date']);
-        $isBlocked = $dateRange['is_blocked'] ?? false;
-        $slots     = $dateRange['slots'] ?? [];
-        $now       = now();
+        foreach ($availabilitiesData as $availabilityData) {
+            $date = $availabilityData['available_date'];
 
-        $period = CarbonPeriod::create($startDate, $endDate);
+            $query = $variant->availabilities()->where('available_date', $date);
+            if (!empty($availabilityData['id'])) {
+                $query->where('id', '!=', $availabilityData['id']);
+            }
 
-        // 4. الدوران على كل يوم داخل النطاق الزمني
-        foreach ($period as $date) {
-            $availabilityId = (string) Str::ulid();
+            if ($query->exists()) {
+                throw ValidationException::withMessages([
+                    'availabilities' => "التاريخ {$date} محجوز مسبقاً لهذا الترتيب.",
+                ]);
+            }
 
-            $availabilityRows[] = [
-                'id'                 => $availabilityId,
-                'listing_variant_id' => $variant->id,
-                'available_date'     => $date->format('Y-m-d'),
-                'is_blocked'         => $isBlocked,
-                'created_at'         => $now,
-                'updated_at'         => $now,
-            ];
+            if (!empty($availabilityData['id'])) {
+                $availability = $variant->availabilities()->findOrFail($availabilityData['id']);
+                $availability->update([
+                    'available_date' => Carbon::parse($date)->format('Y-m-d'),
+                    'is_blocked'     => $availabilityData['is_blocked'] ?? false,
+                ]);
+            } else {
+                $availability = $variant->availabilities()->create([
+                    'available_date' => Carbon::parse($date)->format('Y-m-d'),
+                    'is_blocked'     => $availabilityData['is_blocked'] ?? false,
+                ]);
+            }
 
-            // 5. ربط الفترات (Slots) بهذا اليوم المحدد
-            foreach ($slots as $slot) {
-                // إذا كان جدولك لا يحتوي على حقل slot_name يمكنك إزالة السطر التالي
-                $slotName = isset($slot['slot_name']) ? json_encode($slot['slot_name'], JSON_UNESCAPED_UNICODE) : null;
+            // تعبئة الـ remaining_capacity الافتراضي من سعة الباقة قبل التمرير
+            // للـ BulkInsertSlotsAction المشتركة مع الـ Listing (والتي تستخدم 1
+            // كافتراضي عام لا يعرف شيئاً عن سعة الباقة الخاصة بنا).
+            $slots = collect($availabilityData['slots'] ?? [])
+                ->map(function ($slot) use ($defaultCapacity) {
+                    $slot['remaining_capacity'] = $slot['remaining_capacity'] ?? $defaultCapacity;
+                    return $slot;
+                })
+                ->toArray();
 
-                $slotRows[] = [
-                    'id'                      => (string) Str::ulid(),
-                    'listing_availability_id' => $availabilityId,
-                    'slot_name'               => $slotName, // أضفنا حقل الاسم بناءً على الـ JSON الجديد
-                    'start_time'              => $slot['start_time'],
-                    'end_time'                => $slot['end_time'],
-                    'remaining_capacity'      => $slot['remaining_capacity'] ?? $defaultCapacity,
-                    'created_at'              => $now,
-                    'updated_at'              => $now,
+            $this->bulkInsertSlotsAction->execute($availability, $slots);
+        }
+    }
+
+    /**
+     * تحويل نطاق زمني (date_range) إلى مصفوفة تواريخ فردية بنفس صيغة
+     * $availabilitiesData المستخدمة في execute()، تماماً كما تفعل
+     * SyncListingVariantsAction::generateAvailabilitiesFromRange للـ Listing.
+     *
+     * لا تُنشئ أي سجلات في قاعدة البيانات مباشرة — فقط تجهّز البيانات
+     * لتمريرها بعدها إلى execute() التي تتولى المزامنة الآمنة بالـ ID.
+     */
+    public function buildAvailabilitiesFromRange(array $range): array
+    {
+        $startDate = Carbon::parse($range['start_date'])->startOfDay();
+        $endDate   = Carbon::parse($range['end_date'])->startOfDay();
+        $today     = Carbon::today();
+        $isBlocked = $range['is_blocked'] ?? false;
+        $slots     = $range['slots'] ?? [];
+
+        if ($startDate->gt($endDate)) {
+            return [];
+        }
+
+        $availabilities = [];
+        $current = $startDate->copy();
+
+        while ($current->lte($endDate)) {
+            if ($current->gte($today)) {
+                $availabilities[] = [
+                    'available_date' => $current->format('Y-m-d'),
+                    'is_blocked'     => $isBlocked,
+                    'slots'          => $slots,
                 ];
             }
+            $current->addDay();
         }
 
-        // 6. الحفظ في قاعدة البيانات على شكل دفعات (Chunks) لتجنب أخطاء الـ Memory
-        if (!empty($availabilityRows)) {
-            foreach (array_chunk($availabilityRows, 500) as $chunk) {
-                DB::table('listing_availabilities')->insert($chunk);
-            }
-        }
-
-        if (!empty($slotRows)) {
-            foreach (array_chunk($slotRows, 500) as $chunk) {
-                DB::table('listing_slots')->insert($chunk);
-            }
-        }
+        return $availabilities;
     }
 }

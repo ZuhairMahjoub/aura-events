@@ -29,8 +29,17 @@ class FavoriteService
     {
         return Listing::query()
             ->whereHas('favoritedBy', fn ($q) => $q->where('users.id', $userId))
+            
+            ->orderByDesc(
+                Favorite::select('created_at')
+                    ->whereColumn('favorites.listing_id', 'listings.id')
+                    ->where('favorites.user_id', $userId)
+                    ->latest()
+                    ->take(1)
+            )
+            
+            // 3. Eager load relations
             ->with(['images', 'variants', 'category', 'district'])
-            ->latest('favorites.created_at')
             ->paginate($perPage);
     }
 }

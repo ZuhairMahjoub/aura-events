@@ -30,7 +30,8 @@ class ArrangementStoreRequest extends FormRequest
 
             // ── Variant / pricing ────────────────────────────────────────────
             'price'      => 'required|numeric|min:0|max:999999.99',
-            'price_type' => 'required|in:fixed,per_hour,per_day',
+            'price_type' => 'required|in:fixed,hourly',
+            'currency'   => 'required|string|size:3',
             'capacity'   => 'nullable|integer|min:1|max:10000',
 
             // ── Cancellation policies ────────────────────────────────────────

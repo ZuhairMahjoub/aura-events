@@ -41,22 +41,28 @@ class Booking extends Model
     ];
 
     // الـ Relationships
-    public function provider() {
+    public function provider()
+    {
         return $this->belongsTo(Provider::class);
     }
 
-    public function listing() {
+    public function listing()
+    {
         return $this->belongsTo(Listing::class);
     }
-    public function variant() {
+    public function variant()
+    {
         return $this->belongsTo(ListingVariant::class, 'listing_variant_id');
     }
-    public function slot() {
+    public function slot()
+    {
         return $this->belongsTo(ListingSlot::class, 'listing_slot_id');
     }
-    public function user() {
-        return $this->belongsTo(User::class);  }
-            /**
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+    /**
      * تحويل بيانات الطلب إلى DTO.
      * هذا هو الحل للخطأ الذي يظهر لك حالياً.
      */
@@ -64,5 +70,8 @@ class Booking extends Model
     {
         return \App\DTOs\BookingData::fromRequest($validated, $userId);
     }
-
+    public function reviews()
+    {
+        return $this->hasMany(Review::class);
+    }
 }

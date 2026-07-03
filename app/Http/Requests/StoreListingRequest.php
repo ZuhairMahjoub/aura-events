@@ -35,11 +35,12 @@ class StoreListingRequest extends FormRequest
             'district_id'                => ['required', 'integer'],
             'title'                      => ['required', 'array'],
             'description'                => ['required', 'array'],
-            'listing_type'               => ['required', Rule::in(['physical_product', 'service', 'package'])],
+            'listing_type'               => ['required', Rule::in(['physical_product', 'service', 'package','hall'])],
             'cancel_before_acceptance'   => ['nullable', 'boolean'],
             'cancel_after_acceptance'    => ['nullable', 'boolean'],
             'cancel_before_payment'      => ['nullable', 'boolean'],
             'is_provider_location_based' => ['nullable', 'boolean'],
+'variants.*.capacity' => ['nullable', 'integer', 'min:1'],
             'secondary_contact_number'   => ['nullable', 'string', 'max:20'],
             'material_composition'       => ['nullable', 'string', 'max:255'],
             'moderation_status'          => ['nullable', 'string', Rule::in(['draft', 'pending_approval'])],
@@ -63,10 +64,10 @@ class StoreListingRequest extends FormRequest
             $rules['variants.*.stock_quantity'] = ['required', 'integer', 'min:0'];
             $rules['variants.*.date_range']     = ['nullable', 'array'];
             $rules['variants.*.availabilities'] = ['nullable', 'array'];
-        } elseif ($this->input('listing_type') === 'service' || $this->input('listing_type') === 'package') {
+        } elseif ($this->input('listing_type') === 'service' || $this->input('listing_type') === 'package'||$this->input('listing_type') === 'hall') {
             // Fix #4: was a bare { } block, now correctly an elseif
             $rules['variants.*.stock_quantity'] = ['nullable', 'integer', 'min:0'];
-
+            $rules['variants.*.capacity'] = ['nullable', 'integer', 'min:1'];
             $rules['variants.*.date_range']                    = ['nullable', 'array', 'required_without:variants.*.availabilities'];
             $rules['variants.*.date_range.start_date']         = ['required_with:variants.*.date_range', 'date', 'after_or_equal:today'];
             $rules['variants.*.date_range.end_date']           = ['required_with:variants.*.date_range', 'date', 'after_or_equal:variants.*.date_range.start_date'];

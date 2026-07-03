@@ -55,6 +55,7 @@ class ListingResource extends JsonResource
                     'price_type' => $variant->price_type,
                     'stock'      => $variant->stock_quantity,
                     'attributes' => $variant->dynamic_attributes,
+                    'capacity'   => $variant->capacity,
 
                     'images' => $variant->relationLoaded('images')
                         ? $variant->images->map(fn($img) => [

@@ -155,4 +155,14 @@ public function bookings()
 {
     return $this->belongsToMany(ChatRoom::class, 'chat_room_participants', 'user_id', 'chat_room_id');
 }
+// في كلا الموديلين
+public function reviewsReceived()
+{
+    return $this->morphMany(Review::class, 'reviewee');
+}
+
+public function reviewsGiven()
+{
+    return $this->morphMany(Review::class, 'reviewer');
+}
 }

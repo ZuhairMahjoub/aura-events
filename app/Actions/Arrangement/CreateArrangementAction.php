@@ -61,9 +61,11 @@ class CreateArrangementAction
                 $this->syncFreelancers->execute($variant->id, $data['freelancers']);
             }
             
-            // ── التعديل هنا: تمرير الـ date_range الجديد ──────────────────────
+            // ── مزامنة التواريخ: تفريد الـ date_range إلى أيام فردية ثم
+            // تمريرها لنفس منطق المزامنة الآمن بالـ ID (مطابق لـ Listing) ─────
             if (! empty($data['date_range'])) {
-                $this->syncAvailabilities->execute($variant, $data['date_range'], $data['capacity'] ?? 1);
+                $availabilities = $this->syncAvailabilities->buildAvailabilitiesFromRange($data['date_range']);
+                $this->syncAvailabilities->execute($variant, $availabilities, $data['capacity'] ?? 1);
             }
             
             if (! empty($data['images'])) {

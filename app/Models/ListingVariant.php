@@ -26,6 +26,7 @@ class ListingVariant extends Model
         'stock_quantity',
         'dynamic_attributes',
             'currency',
+            'capacity', // Added capacity to fillable attributes
             'stock_quantity',
 
     ];

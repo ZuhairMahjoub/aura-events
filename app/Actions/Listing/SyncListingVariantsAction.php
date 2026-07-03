@@ -79,7 +79,7 @@ class SyncListingVariantsAction
             $payload['id'] = (string) Str::ulid();
         }
 
-        $fields = ['variant_name', 'price', 'currency', 'price_type', 'stock_quantity'];
+        $fields = ['variant_name', 'price', 'currency', 'price_type', 'stock_quantity', 'capacity'];
         foreach ($fields as $field) {
             if (array_key_exists($field, $variantData)) {
                 $payload[$field] = $variantData[$field];

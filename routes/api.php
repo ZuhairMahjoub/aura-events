@@ -25,6 +25,7 @@ use App\Http\Controllers\OrganizerController;
 use App\Http\Controllers\ProviderController;
 use App\Http\Controllers\CompanyDetailController;
 use App\Http\Controllers\FavoriteController;
+use App\Http\Controllers\ReviewController;
 
 
 Route::prefix('auth')->group(function () {
@@ -171,4 +172,8 @@ Route::get('/providers', [ProviderController::class, 'getProviders']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/favorites/{listingId}/toggle', [FavoriteController::class, 'toggle']);
     Route::get('/favorites', [FavoriteController::class, 'index']);
+
+Route::post('/reviews/provider', [ReviewController::class, 'reviewProvider']);   // المنظم يقيّم المزود
+Route::post('/reviews/organizer', [ReviewController::class, 'reviewOrganizer']); // المزود يقيّم المنظم
+Route::get('/providers/{providerId}/reviews', [ReviewController::class, 'providerReviews']);
 });

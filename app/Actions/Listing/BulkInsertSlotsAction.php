@@ -9,6 +9,14 @@ class BulkInsertSlotsAction
 {
     public function execute(ListingAvailability $availability, array $slotsData): void
     {
+        // الصالة (hall) حجزها حصري بطبيعته الفيزيائية — ما ممكن حفلتين
+        // مختلفتين بنفس الصالة بنفس الوقت، بغض النظر عن سعة الصالة (الأشخاص).
+        // remaining_capacity هون معناه "كم حجز متزامن مسموح بنفس الـ slot"،
+        // ولازم يكون 1 دايماً للصالات، مش قابل للتعديل من الـ provider/frontend
+        // (بدون هالفحص، ممكن حد يرسل remaining_capacity > 1 ويصير في ثغرة
+        // double-booking حقيقية لنفس المكان الفيزيائي بنفس الوقت).
+        $isHall = $availability->variant->listing->listing_type === 'hall';
+
         $sentSlotIds = collect($slotsData)
             ->pluck('id')
             ->filter()
@@ -45,7 +53,7 @@ class BulkInsertSlotsAction
                     'slot_name'          => $slotData['slot_name'] ?? $slotData['name'] ?? null,
                     'start_time'         => $startTime,
                     'end_time'           => $endTime,
-                    'remaining_capacity' => $slotData['remaining_capacity'] ?? 1,
+                    'remaining_capacity' => $isHall ? 1 : ($slotData['remaining_capacity'] ?? 1),
                 ]);
             } else {
                 // إنشاء slot جديد
@@ -53,7 +61,7 @@ class BulkInsertSlotsAction
                     'slot_name'          => $slotData['slot_name'] ?? $slotData['name'] ?? null,
                     'start_time'         => $startTime,
                     'end_time'           => $endTime,
-                    'remaining_capacity' => $slotData['remaining_capacity'] ?? 1,
+                    'remaining_capacity' => $isHall ? 1 : ($slotData['remaining_capacity'] ?? 1),
                 ]);
             }
         }

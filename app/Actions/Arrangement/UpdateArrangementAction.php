@@ -6,6 +6,7 @@ use App\Models\Listing;
 use App\Services\MediaService;
 use Exception;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class UpdateArrangementAction
 {
@@ -44,7 +45,7 @@ class UpdateArrangementAction
 
             $variant = $listing->variants()->firstOrFail();
 
-            $variantPayload = array_intersect_key($data, array_flip(['price', 'price_type']));
+            $variantPayload = array_intersect_key($data, array_flip(['price', 'price_type', 'currency']));
             if (isset($data['capacity'])) {
                 $variantPayload['dynamic_attributes'] = array_merge(
                     $variant->dynamic_attributes ?? [],
@@ -64,17 +65,48 @@ class UpdateArrangementAction
             if (isset($data['freelancers'])) {
                 $this->syncFreelancers->execute($variant->id, $data['freelancers']);
             }
-            if (isset($data['availabilities'])) {
-                $this->syncAvailabilities->execute($variant, $data['availabilities'], $data['capacity'] ?? 1);
+
+            // ── مزامنة التواريخ والمواعيد: بنفس أولوية الـ Listing تماماً ──────
+            // - availabilities موجودة  → مزامنة مباشرة بالـ ID (تعديل/حذف آمن).
+            // - وإلا date_range موجود  → تفريد النطاق لأيام فردية ثم نفس المزامنة الآمنة.
+            $defaultCapacity = $data['capacity'] ?? ($variant->dynamic_attributes['capacity'] ?? 1);
+
+            if (!empty($data['availabilities'])) {
+                $this->syncAvailabilities->execute($variant, $data['availabilities'], $defaultCapacity);
+            } elseif (!empty($data['date_range'])) {
+                $availabilities = $this->syncAvailabilities->buildAvailabilitiesFromRange($data['date_range']);
+                $this->syncAvailabilities->execute($variant, $availabilities, $defaultCapacity);
             }
-            if (! empty($data['images'])) {
-                $this->attachImages($data['images'], $listing);
-            }
-            if (! empty($data['images_to_delete'])) {
-                foreach ($data['images_to_delete'] as $imageId) {
-                    $image = $listing->images()->find($imageId);
-                    if ($image) {
-                        $this->mediaService->deleteImage($image);
+
+            // ── إدارة الصور بنفس منطق الـ Listing تماماً (3 حالات) ─────────────
+            // - images غير موجودة في الـ request  → لا تمس الصور.
+            // - images: []                         → احذف كل الصور.
+            // - images: [{id:...}, {path:...}]     → sync (احتفظ بالقديمة وارفع الجديدة).
+            if (array_key_exists('images', $data)) {
+                $images = $data['images'] ?? [];
+
+                $keepIds = collect($images)
+                    ->filter(fn ($img) => is_array($img) && !empty($img['id']))
+                    ->pluck('id')
+                    ->toArray();
+
+                $listing->images()->whereNotIn('id', $keepIds)->delete();
+
+                foreach ($images as $img) {
+                    if (is_array($img) && empty($img['id']) && !empty($img['path'])) {
+                        $cleanPath = Str::startsWith($img['path'], 'temp/')
+                            ? $img['path']
+                            : 'temp/' . $img['path'];
+
+                        try {
+                            $this->mediaService->moveAndAttach(
+                                $cleanPath,
+                                $listing,
+                                "arrangements/{$listing->id}/main"
+                            );
+                        } catch (\Exception $e) {
+                            \Illuminate\Support\Facades\Log::error("خطأ أثناء نقل صورة الترتيب {$cleanPath}: " . $e->getMessage());
+                        }
                     }
                 }
             }
@@ -86,33 +118,5 @@ class UpdateArrangementAction
                 'images', 'category', 'district',
             ]);
         });
-    }
-
-    private function attachImages(array $tempPaths, Listing $listing): void
-    {
-        foreach ($tempPaths as $path) {
-            // إصلاح 1: البيانات القادمة من الـ validation هي مصفوفة مفتاحها
-            // نصي {id: ..., path: "temp/xxx.jpg"} — وليست مصفوفة مرقّمة، لذا
-            // $path[0] كان دائماً غير موجود (undefined key) ويرجع null.
-            $cleanPath = is_array($path) ? ($path['path'] ?? null) : $path;
-
-            if (empty($cleanPath)) {
-                continue;
-            }
-
-            // إصلاح 2: تطبيع المسار بإضافة 'temp/' إذا لم يكن موجوداً،
-            // بنفس منطق CreateArrangementAction و Listing.
-            $cleanPath = \Illuminate\Support\Str::startsWith($cleanPath, 'temp/')
-                ? $cleanPath
-                : 'temp/' . $cleanPath;
-
-            // إصلاح 3: try/catch لمنع فشل ملف واحد من إيقاف كل عملية
-            // التحديث (transaction كاملة كانت تفشل بخطأ 500 من قبل).
-            try {
-                $this->mediaService->moveAndAttach($cleanPath, $listing, "arrangements/{$listing->id}/main");
-            } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::error("خطأ أثناء نقل صورة الترتيب {$cleanPath}: " . $e->getMessage());
-            }
-        }
     }
 }
