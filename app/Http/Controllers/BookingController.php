@@ -11,12 +11,19 @@ use App\Models\Booking;
 use Illuminate\Support\Facades\Gate;
 use App\Http\Resources\BookingResource;
 use Illuminate\Support\Facades\DB;
+use App\Services\FirebaseNotificationService;
+
 
 class BookingController extends Controller
 {
+        protected $firebaseNotificationService;
+
     public function __construct(
-        private readonly BookingService $bookingService,
-    ) {}
+        private readonly BookingService $bookingService,FirebaseNotificationService $firebaseNotificationService
+    ) {
+              $this->firebaseNotificationService = $firebaseNotificationService;
+
+    }
 
     public function store(StoreBookingRequest $request): JsonResponse
     {
@@ -26,7 +33,12 @@ class BookingController extends Controller
         );
 
         $booking = $this->bookingService->book($data);
-
+         $this->firebaseNotificationService->sendToUser(
+        $booking->provider_id,
+        'طلب حجز جديد! 📅',
+        'لديك طلب حجز جديد من ' . $request->user()->first_name,
+        ['action' => 'new_booking', 'booking_id' => $booking->id]
+    );
         return response()->json([
             'message' => 'تم إرسال طلب الحجز بنجاح.',
             'data'    => $booking,
@@ -47,6 +59,12 @@ class BookingController extends Controller
             $cancelledBy,
             $request->input('reason')
         );
+      $this->firebaseNotificationService->sendToUser(
+    $booking->user_id, // هون حطينا رقم المستخدم مباشرة
+    'تم إلغاء الحجز',
+    'تم إلغاء الحجز رقم ' . $booking->id . ' بنجاح.',
+    ['action' => 'booking_cancelled', 'booking_id' => $booking->id]
+);
 
         return response()->json([
             'message' => 'تم إلغاء الحجز.',
@@ -87,6 +105,12 @@ class BookingController extends Controller
         $providerId = request()->user()->providerProfile->id;
 
         $booking = $this->bookingService->accept($bookingId, $providerId);
+        $this->firebaseNotificationService->sendToUser(
+        $booking->user_id,
+        'تم قبول حجزك! 🎉',
+        'قام مزود الخدمة بقبول طلب الحجز الخاص بك.',
+        ['action' => 'booking_accepted', 'booking_id' => $booking->id]
+    );
 
         return response()->json([
             'success' => true,
@@ -144,7 +168,12 @@ class BookingController extends Controller
         Gate::authorize('complete', $booking); // تأكد من حمايتها في الـ Policy
 
         $booking = $this->bookingService->complete($bookingId);
-
+        $this->firebaseNotificationService->sendToUser(
+        $booking->user_id,
+        'الحجز مكتمل ✅',
+        'تم إتمام الحجز بنجاح. شكراً لثقتك بنا!',
+        ['action' => 'booking_completed', 'booking_id' => $booking->id]
+    );
         return response()->json([
             'success' => true,
             'message' => 'تم تغيير حالة الحجز إلى مكتمل بنجاح.',
