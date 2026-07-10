@@ -41,7 +41,7 @@ class CreateArrangementAction
                 'cancel_after_acceptance'  => $data['cancel_after_acceptance'] ?? false,
                 'cancel_before_payment'    => $data['cancel_before_payment'] ?? false,
                 'moderation_status'        => 'pending_approval',
-             
+
             ]);
 
             $variant = ListingVariant::create([
@@ -50,7 +50,7 @@ class CreateArrangementAction
                 'price'              => $data['price'],
                 'price_type'         => $data['price_type'],
                 'dynamic_attributes' => isset($data['capacity']) ? ['capacity' => $data['capacity']] : null,
-                   'stock_quantity'           => $data['capacity'],
+                'stock_quantity'           => $data['capacity'],
                 'currency'                 => $data['currency'],
             ]);
 
@@ -60,14 +60,14 @@ class CreateArrangementAction
             if (! empty($data['freelancers'])) {
                 $this->syncFreelancers->execute($variant->id, $data['freelancers']);
             }
-            
-            // ── مزامنة التواريخ: تفريد الـ date_range إلى أيام فردية ثم
-            // تمريرها لنفس منطق المزامنة الآمن بالـ ID (مطابق لـ Listing) ─────
-            if (! empty($data['date_range'])) {
+
+            if (! empty($data['availabilities'])) {
+                $this->syncAvailabilities->execute($variant, $data['availabilities'], $data['capacity'] ?? 1);
+            } elseif (! empty($data['date_range'])) {
                 $availabilities = $this->syncAvailabilities->buildAvailabilitiesFromRange($data['date_range']);
                 $this->syncAvailabilities->execute($variant, $availabilities, $data['capacity'] ?? 1);
             }
-            
+
             if (! empty($data['images'])) {
                 $this->attachImages($data['images'], $listing);
             }
@@ -78,41 +78,43 @@ class CreateArrangementAction
                 'variants.packageItems.includedVariant.listing.images',
                 'variants.packageFreelancers.freelancer',
                 'variants.availabilities.slots',
-                'images', 'category', 'district',
+                'images',
+                'category',
+                'district',
             ]);
         });
     }
 
-   private function attachImages(array $tempPaths, Listing $listing): void
-{
-    foreach ($tempPaths as $path) {
-        // هنا يتم التقاط حقل path القادم من الـ JSON الجديد
-        $cleanPath = is_array($path) ? ($path['path'] ?? null) : $path;
+    private function attachImages(array $tempPaths, Listing $listing): void
+    {
+        foreach ($tempPaths as $path) {
+            // هنا يتم التقاط حقل path القادم من الـ JSON الجديد
+            $cleanPath = is_array($path) ? ($path['path'] ?? null) : $path;
 
-        if (empty($cleanPath)) {
-            continue;
-        }
+            if (empty($cleanPath)) {
+                continue;
+            }
 
-        // إصلاح: نفس منطق CreateListingAction — تطبيع المسار بإضافة
-        // 'temp/' إذا لم يكن موجوداً. بدون هذا، أي مسار يصل بدون البريفكس
-        // (فقط اسم الملف) يفشل بصمت في file_exists() ويتم تجاوز الصورة
-        // دون أي خطأ ظاهر للمستخدم — وهو تحديداً ما كان يحدث هنا.
-        $cleanPath = \Illuminate\Support\Str::startsWith($cleanPath, 'temp/')
-            ? $cleanPath
-            : 'temp/' . $cleanPath;
+            // إصلاح: نفس منطق CreateListingAction — تطبيع المسار بإضافة
+            // 'temp/' إذا لم يكن موجوداً. بدون هذا، أي مسار يصل بدون البريفكس
+            // (فقط اسم الملف) يفشل بصمت في file_exists() ويتم تجاوز الصورة
+            // دون أي خطأ ظاهر للمستخدم — وهو تحديداً ما كان يحدث هنا.
+            $cleanPath = \Illuminate\Support\Str::startsWith($cleanPath, 'temp/')
+                ? $cleanPath
+                : 'temp/' . $cleanPath;
 
-        $absTempPath = storage_path('app/public/' . str_replace('/', DIRECTORY_SEPARATOR, $cleanPath));
+            $absTempPath = storage_path('app/public/' . str_replace('/', DIRECTORY_SEPARATOR, $cleanPath));
 
-        if (! file_exists($absTempPath)) {
-            \Illuminate\Support\Facades\Log::error("فشل العثور على الملف المؤقت: {$absTempPath}");
-            continue;
-        }
+            if (! file_exists($absTempPath)) {
+                \Illuminate\Support\Facades\Log::error("فشل العثور على الملف المؤقت: {$absTempPath}");
+                continue;
+            }
 
-        try {
-            $this->mediaService->moveAndAttach($cleanPath, $listing, "arrangements/{$listing->id}/main");
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("خطأ أثناء نقل الصورة {$cleanPath}: " . $e->getMessage());
+            try {
+                $this->mediaService->moveAndAttach($cleanPath, $listing, "arrangements/{$listing->id}/main");
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("خطأ أثناء نقل الصورة {$cleanPath}: " . $e->getMessage());
+            }
         }
     }
-}
 }

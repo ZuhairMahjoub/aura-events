@@ -116,7 +116,7 @@ public function getCompanyInventory(Request $request): JsonResponse
 
     return response()->json([
         'message' => 'Hall and its custom packages synchronized successfully!',
-        'data'    => $updatedListing
+        'data'    => new ListingResource($updatedListing)
     ], 200);
 }
 

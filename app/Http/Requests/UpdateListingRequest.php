@@ -52,7 +52,7 @@ class UpdateListingRequest extends FormRequest
             'description.ar' => ['nullable', 'string'],
             'description.en' => ['nullable', 'string'],
 
-            'listing_type'  => ['sometimes', Rule::in(['physical_product', 'service', 'package'])],
+            'listing_type'  => ['sometimes', Rule::in(['physical_product', 'service', 'package','hall'])],
 
             'cancel_before_acceptance' => ['sometimes', 'boolean'],
             'cancel_after_acceptance'  => ['sometimes', 'boolean'],
@@ -102,7 +102,7 @@ class UpdateListingRequest extends FormRequest
                 'nullable',
                 Rule::exists('listing_availabilities', 'id')
             ],
-            'variants.*.availabilities.*.available_date' => ['required', 'date', 'after_or_equal:today'],
+            'variants.*.availabilities.*.available_date' => ['nullable', 'date', 'after_or_equal:today'],
             'variants.*.availabilities.*.is_blocked'     => ['nullable', 'boolean'],
 
             // ── Slots Validation ──────────────────────────────────────
