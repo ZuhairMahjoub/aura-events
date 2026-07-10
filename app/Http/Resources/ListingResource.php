@@ -29,16 +29,15 @@ class ListingResource extends JsonResource
             'category'                   => $this->relationLoaded('category') && $this->category
                 ? [
                     'id'   => $this->category->id,
-                    'name' => $this->category->name_en,
+                    'name' => $this->category->name,
                 ]
                 : null,
-
-            'district'                   => $this->relationLoaded('district') && $this->district
-                ? [
-                    'id'   => $this->district->id,
-                    'name' => $this->district->name_en,
-                ]
-                : null,
+'district' => $this->relationLoaded('district') && $this->district
+    ? [
+        'id'   => $this->district->id,
+        'name' => $this->district->name,   
+    ]
+    : null,
                'company' => $this->relationLoaded('provider') && $this->provider
                 ? [
                     'id'   => $this->provider->id,

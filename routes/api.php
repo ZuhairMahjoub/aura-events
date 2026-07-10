@@ -24,6 +24,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrganizerController;
 use App\Http\Controllers\ProviderController;
 use App\Http\Controllers\CompanyDetailController;
+   Route::middleware(['set_locale'])->group(function () {
 
 
 Route::prefix('auth')->group(function () {
@@ -73,8 +74,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     Route::prefix('listings')->group(function () {
 
-        Route::get('/', [ListingController::class, 'index'])->middleware('permission:view listings');
-        Route::get('/{listing}', [ListingController::class, 'show'])->middleware('permission:view listings');
         Route::get('/provider/my-services', [ListingController::class, 'getCompanyServices']);
 
         Route::middleware(['approved_provider'])->group(function () {
@@ -168,3 +167,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/chat/initialize', [ChatController::class, 'initializeChat']);
 });
 Route::get('/providers', [ProviderController::class, 'getProviders']);
+
+    
+    // ضع مسارات العرض العام هنا لتعمل بدون تسجيل دخول
+    
+    // مسارات الـ listings
+    Route::prefix('listings/show')->group(function () {
+        Route::get('/', [ListingController::class, 'index']);
+        Route::get('/{listing}', [ListingController::class, 'show']);
+    });
+
+    // مسار الـ districts (مستقل)
+    Route::get('districts', [DistrictsController::class, 'index']);
+});

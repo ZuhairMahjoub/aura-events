@@ -35,9 +35,9 @@ class BookingController extends Controller
         $booking = $this->bookingService->book($data);
          $this->firebaseNotificationService->sendToUser(
         $booking->provider_id,
-        'طلب حجز جديد! 📅',
-        'لديك طلب حجز جديد من ' . $request->user()->first_name,
-        ['action' => 'new_booking', 'booking_id' => $booking->id]
+           __('notif_booking_new_title'),
+           __('notif_booking_new_body', ['name' => $request->user()->first_name]),
+           ['action' => 'new_booking', 'booking_id' => $booking->id]
     );
         return response()->json([
             'message' => 'تم إرسال طلب الحجز بنجاح.',
@@ -60,9 +60,9 @@ class BookingController extends Controller
         );
       $this->firebaseNotificationService->sendToUser(
     $booking->user_id, // هون حطينا رقم المستخدم مباشرة
-    'تم إلغاء الحجز',
-    'تم إلغاء الحجز رقم ' . $booking->id . ' بنجاح.',
-    ['action' => 'booking_cancelled', 'booking_id' => $booking->id]
+    __('notif_booking_cancelled_title'),
+    __('notif_booking_cancelled_body', ['id' => $booking->id]),
+     ['action' => 'booking_cancelled', 'booking_id' => $booking->id]
 );
 
         return response()->json([
@@ -104,8 +104,8 @@ class BookingController extends Controller
         $booking = $this->bookingService->accept($bookingId, $providerId);
         $this->firebaseNotificationService->sendToUser(
         $booking->user_id,
-        'تم قبول حجزك! 🎉',
-        'قام مزود الخدمة بقبول طلب الحجز الخاص بك.',
+        __('notif_booking_accepted_title'),
+        __('notif_booking_accepted_body'),
         ['action' => 'booking_accepted', 'booking_id' => $booking->id]
     );
 
@@ -167,10 +167,9 @@ class BookingController extends Controller
         $booking = $this->bookingService->complete($bookingId);
         $this->firebaseNotificationService->sendToUser(
         $booking->user_id,
-        'الحجز مكتمل ✅',
-        'تم إتمام الحجز بنجاح. شكراً لثقتك بنا!',
-        ['action' => 'booking_completed', 'booking_id' => $booking->id]
-    );
+        __('notif_booking_completed_title'),
+        __('notif_booking_completed_body'),
+        ['action' => 'booking_completed', 'booking_id' => $booking->id]    );
         return response()->json([
             'success' => true,
             'message' => 'تم تغيير حالة الحجز إلى مكتمل بنجاح.',
@@ -193,10 +192,9 @@ class BookingController extends Controller
             ]);
             $this->firebaseNotificationService->sendToUser(
         $booking->user_id,
-        'تحديث بخصوص حجزك',
-        'عذراً، تم رفض طلب حجزك. السبب: ' . $reason,
-        ['action' => 'booking_rejected', 'booking_id' => $booking->id]
-    );
+         __('notif_booking_rejected_title'),
+         __('notif_booking_rejected_body', ['reason' => $reason]),
+          ['action' => 'booking_rejected', 'booking_id' => $booking->id]    );
 
             return $booking;   //  لا استدعاء لـ releaseCapacity() نهائياً!
         });

@@ -5,10 +5,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Spatie\Translatable\HasTranslations;
 
 class ListingSlot extends Model
 {
-    use HasFactory, HasUlids;
+    use HasFactory, HasUlids,HasTranslations;
+    public $translatable = ['slot_name'];
     public $incrementing = false;
     
     protected $keyType = 'string';

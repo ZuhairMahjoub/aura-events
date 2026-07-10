@@ -13,8 +13,7 @@ return new class extends Migration
     {
         Schema::create('governorates', function (Blueprint $table) {
             $table->id();
-            $table->string('name_en');
-            $table->string('name_ar');  
+           $table->json('name');
             $table->timestamps();
         });
     }
