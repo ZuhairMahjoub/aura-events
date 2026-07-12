@@ -10,11 +10,15 @@ use App\Services\ArrangementService;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
+use App\Services\ListingService;
 
 class ArrangementController extends Controller
 {
-    public function __construct(protected ArrangementService $arrangementService) {}
+    public function __construct(protected ArrangementService $arrangementService, protected ListingService $listingService) {
+    }
 
     // ────────────────────────────────────────────────────────────────────────────
     // Package CRUD
@@ -303,4 +307,33 @@ class ArrangementController extends Controller
             ], 500);
         }
     }
+    public function destroy(string $arrangementId): JsonResponse
+{
+    $arrangement = Listing::where('listing_type', 'package')
+        ->findOrFail($arrangementId);
+
+    Gate::authorize('delete', $arrangement);
+
+    try {
+        $this->listingService->deleteListing($arrangement);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم حذف الترتيب بنجاح.'
+        ], Response::HTTP_OK);
+
+    } catch (Exception $e) {
+        if ($e->getCode() == '23000') {
+            return response()->json([
+                'success' => false,
+                'message' => 'لا يمكن حذف هذا الترتيب لوجود حجوزات مرتبطة به مسبقاً.'
+            ], Response::HTTP_CONFLICT);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'حدث خطأ غير متوقع أثناء محاولة الحذف.'
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+}
 }

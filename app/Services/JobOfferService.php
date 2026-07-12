@@ -17,7 +17,24 @@ class JobOfferService
             'company_id' => $companyId
         ]));
     }
-
+/**
+     * Get a specific job offer by ID
+     */
+    public function getJobOfferById($id)
+    {
+        // Adjust model name or eager loading (e.g., with('company')) if needed
+        return JobOffer::find($id); 
+    }
+  public function getFreelancerAppliedJobs(string $freelancerId)
+    {
+        return CompanyFreelancerContract::where('freelancer_id', $freelancerId)
+            ->with([
+                'jobOffer', // جلب تفاصيل الوظيفة التي تم التقديم عليها
+                'jobOffer.provider:id,brand_name' // (اختياري) جلب اسم الشركة الناشرة للوظيفة أيضاً
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+    }
     /**
      * جلب المتقدمين لوظائف الشركة (الشاشة الفاتحة)
      */

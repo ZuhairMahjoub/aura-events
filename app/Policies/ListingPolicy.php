@@ -41,7 +41,7 @@ class ListingPolicy
 
     public function delete(User $user, Listing $listing): bool
     {
-        if ($user->hasRole('admin') || $user->hasPermissionTo('manage all listings')) {
+        if ($user->hasRole('admin')) {
             return true;
         }
 

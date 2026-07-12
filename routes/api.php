@@ -107,7 +107,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('provider/my-products', [ListingController::class, 'getCompanyProducts']);
         Route::get('/provider/available-freelancers', [ArrangementController::class, 'getFreelancersList']);
         Route::get('/job-offers', [JobOfferController::class, 'index']);
-    });
+    });Route::get('/job-offers/{id}', [JobOfferController::class, 'show']);
+    Route::get('/my-applied-jobs', [JobOfferController::class, 'getAppliedJobs']);
 });
 Route::middleware('auth:sanctum')->group(function () {
 

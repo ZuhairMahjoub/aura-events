@@ -63,6 +63,19 @@ class JobOfferController extends Controller
         ], 201);
     }
 
+    public function getAppliedJobs(Request $request): JsonResponse
+    {
+        // جلب الملف الشخصي للفريلانسر الحالي
+        $freelancer = $request->user()->providerProfile;
+
+        // جلب الوظائف عبر الـ Service
+        $appliedJobs = $this->jobOfferService->getFreelancerAppliedJobs($freelancer->id);
+
+        return response()->json([
+            'success' => true,
+            'data' => $appliedJobs,
+        ], 200);
+    }
     /**
      * [الشاشة الفاتحة] جلب المتقدمين
      */
@@ -77,7 +90,25 @@ class JobOfferController extends Controller
             'data' => $applicants,
         ], 200);
     }
+/**
+     * جلب تفاصيل عرض عمل معين بواسطة المعرّف (ID)
+     */
+    public function show($id): JsonResponse
+    {
+        $jobOffer = $this->jobOfferService->getJobOfferById($id);
 
+        if (!$jobOffer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'عذراً، عرض العمل هذا غير موجود.',
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $jobOffer,
+        ], 200);
+    }
     /**
      * [أزرار الشاشة الفاتحة] قبول أو رفض طلب
      */

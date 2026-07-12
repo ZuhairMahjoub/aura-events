@@ -19,6 +19,14 @@ class Image extends Model
     {
         return $this->morphTo();
     }
+     protected static function booted(): void
+    {
+        static::deleting(function (Image $image) {
+            if ($image->path && Storage::disk('public')->exists($image->path)) {
+                Storage::disk('public')->delete($image->path);
+            }
+        });
+    }
 
     protected function fullUrl(): Attribute
     {

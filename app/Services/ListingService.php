@@ -59,6 +59,10 @@ class ListingService
 
     public function deleteListing(Listing $listing): bool
     {
+    
+    
+       $listing->images()->get()->each->delete();
+
         return (bool) $listing->forceDelete();
     }
 }
