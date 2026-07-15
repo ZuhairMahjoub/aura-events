@@ -65,5 +65,8 @@ class Booking extends Model
     {
         return \App\DTOs\BookingData::fromRequest($validated, $userId);
     }
+    public function payments() {
+    return $this->hasMany(Payment::class);
+}
 
 }

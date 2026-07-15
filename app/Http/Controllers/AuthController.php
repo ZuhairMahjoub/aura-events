@@ -288,12 +288,12 @@ public function getProfile(Request $request)
 
         $this->firebaseNotificationService->sendToUser(
             $user->id, 
-            'New Login Detected 🔒', 
-            'Your account was just accessed. If this wasn\'t you, please secure your account.',
-            [
-                'action' => 'security_alert',
-                'time'   => now()->toDateTimeString()
-            ]
+           __('notification_login_title'), 
+            __('notification_login_body'), 
+         [
+        'action' => 'security_alert',
+        'time'   => now()->toDateTimeString()
+         ]
         );
 
         return response()->json([
@@ -360,17 +360,17 @@ public function getProfile(Request $request)
                 if ($isNewUser) {
                     $this->firebaseNotificationService->sendToUser(
                         $user->id,
-                        'Welcome to Aura Events! 🎉',
-                        'Your account has been created via Google successfully. Welcome aboard!',
+                        __('notification_welcome_title'),
+                        __('notification_welcome_body'),
                         ['action' => 'open_home']
-                    );
+    );
                 } else {
                     $this->firebaseNotificationService->sendToUser(
                         $user->id,
-                        'Google Login Detected 🔑',
-                        'You have successfully logged in using your Google account.',
+                        __('notification_google_login_title'),
+                        __('notification_google_login_body'),
                         ['action' => 'security_alert', 'time' => now()->toDateTimeString()]
-                    );
+    ); 
                 }
 
                 return response()->json([
@@ -506,8 +506,7 @@ public function getProfile(Request $request)
 
     return response()->json([
         'status'  => 'success',
-        'message' => 'Successfully logged out, device token revoked, and account set to inactive.'
-    ], 200);
+        'message' => __('logout_success') ], 200);
 }
 
     public function resendOtp(Request $request)

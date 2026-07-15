@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers;
+use Illuminate\Support\Facades\Storage;
 
 use App\Models\Provider;
 use Illuminate\Http\Request;
@@ -48,6 +49,7 @@ class ProviderController extends Controller
                     'provider_id'       => $provider->id,
                     'brand_name'        => $provider->brand_name,
                     'provider_type'     => $provider->provider_type,
+                    'qr_code_url'       => $provider->qr_code_path ? asset('storage/' . $provider->qr_code_path) : null,
                     'moderation_status' => $provider->moderation_status,
                     'is_verified'       => (bool) $provider->is_verified,
                     'created_at'        => $provider->created_at,
@@ -106,5 +108,35 @@ public function getProviders()
     });
 
     return response()->json($providers, 200);
+}
+public function uploadQrCode(Request $request)
+{
+    // 1. التحقق من المدخلات (صورة فقط وبحجم مناسب)
+    $request->validate([
+        'qr_image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
+    ]);
+
+    $user = $request->user();
+    $provider = $user->providerProfile;
+
+    if (!$provider) {
+        return response()->json(['message' => 'بيانات المزود غير موجودة.'], 404);
+    }
+
+    // 2. حذف الصورة القديمة إذا كانت موجودة لتوفير المساحة
+    if ($provider->qr_code_path) {
+        Storage::disk('public')->delete($provider->qr_code_path);
+    }
+
+    // 3. تخزين الصورة الجديدة
+    $path = $request->file('qr_image')->store('providers/qr_codes', 'public');
+
+    // 4. تحديث المسار في قاعدة البيانات
+    $provider->update(['qr_code_path' => $path]);
+
+    return response()->json([
+        'message' => 'تم رفع الـ QR بنجاح.',
+        'qr_url' => asset('storage/' . $path) // هذا الرابط الذي سيستخدمه الفرونت إند لعرض الصورة
+    ]);
 }
 }
