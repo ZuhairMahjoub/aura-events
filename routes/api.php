@@ -27,7 +27,8 @@ use App\Http\Controllers\CompanyDetailController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\ServiceController;
-
+use App\Models\FreelancerBlockedDate;
+use App\Http\Controllers\FreelancerBlockedDateController;
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'store']);
@@ -189,4 +190,8 @@ Route::middleware(['auth:sanctum', 'approved_provider', 'provider_type:company']
 });
 Route::middleware(['auth:sanctum', 'approved_provider', 'provider_type:freelancer'])->group(function () {
     Route::post('/job-offers/{id}/apply', [JobOfferController::class, 'apply']);
+ 
+    Route::get('/freelancer/blocked-dates', [FreelancerBlockedDateController::class, 'index']);
+    Route::post('/freelancer/blocked-dates', [FreelancerBlockedDateController::class, 'store']);
+    Route::delete('/freelancer/blocked-dates/{id}', [FreelancerBlockedDateController::class, 'destroy']);
 });

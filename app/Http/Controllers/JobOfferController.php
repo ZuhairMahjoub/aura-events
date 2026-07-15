@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\JobOfferService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Validation\Rule;
 
 /**
  * إصلاحات مطبقة على هذا الملف:
@@ -33,7 +34,13 @@ class JobOfferController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $company = $request->user()->providerProfile;
+
         $validated = $request->validate([
+            'service_id' => [
+                'required', 'string',
+                Rule::exists('services', 'id')->where('company_id', $company->id),
+            ],
             'job_title' => ['required', 'string', 'max:255'],
             'time_condition' => ['required', 'in:Permanent,Temporary,Contract'],
             'event_type' => ['required', 'string'],
@@ -51,8 +58,6 @@ class JobOfferController extends Controller
             'job_requirements_and_scope' => ['required', 'string'],
             'contact_info' => ['required', 'string'],
         ]);
-
-        $company = $request->user()->providerProfile;
 
         $jobOffer = $this->jobOfferService->createJobOffer($validated, $company->id);
 

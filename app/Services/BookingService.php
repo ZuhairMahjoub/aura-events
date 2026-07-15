@@ -7,6 +7,7 @@ use App\DTOs\BookingData;
 use App\Events\BookingAccepted;
 use App\Models\Booking;
 use App\Models\BookingStatusLog;
+use App\Models\FreelancerBlockedDate;
 use App\Models\Listing;
 use App\Services\Booking\BookingStrategyFactory;
 use Illuminate\Support\Facades\DB;
@@ -100,6 +101,7 @@ class BookingService
 
             $this->assertCanBeCancelled($booking, $cancelledBy);
             $this->releaseCapacity($booking);
+            $this->releaseFreelancerDateIfApplicable($booking);
 
             $booking->update([
                 'status'               => 'cancelled',
@@ -132,6 +134,7 @@ class BookingService
 
             $previousStatus = $booking->status;
             $this->releaseCapacity($booking);
+            $this->releaseFreelancerDateIfApplicable($booking);
 
             $booking->update([
                 'status'              => 'rejected',
@@ -237,10 +240,43 @@ class BookingService
 
             $this->logTransition($booking, $previousStatus, 'accepted', 'provider', null);
 
+            $this->blockFreelancerDateIfApplicable($booking);
+
             DB::afterCommit(fn() => event(new BookingAccepted($booking)));
 
             return $booking->fresh();
         });
+    }
+
+    /**
+     * الخطوة 6: عند قبول حجز لفريلانسر، نحجز تاريخه تلقائياً بروزنامته
+     * (source = booking) حتى ينمنع تعارضه بأي تنسيق آخر بنفس اليوم.
+     */
+    private function blockFreelancerDateIfApplicable(Booking $booking): void
+    {
+        if ($booking->provider?->provider_type !== 'freelancer') {
+            return;
+        }
+
+        FreelancerBlockedDate::updateOrCreate(
+            [
+                'freelancer_id' => $booking->provider_id,
+                'blocked_date'  => $booking->booked_date,
+            ],
+            [
+                'source'     => 'booking',
+                'booking_id' => $booking->id,
+            ]
+        );
+    }
+
+    /**
+     * الخطوة 6: عند رفض/إلغاء حجز فريلانسر، نحرر تاريخه من الروزنامة
+     * (فقط التواريخ التي حجزها هذا الحجز تحديداً عبر booking_id).
+     */
+    private function releaseFreelancerDateIfApplicable(Booking $booking): void
+    {
+        FreelancerBlockedDate::where('booking_id', $booking->id)->delete();
     }
 
     /**

@@ -28,8 +28,29 @@ class UpdateArrangementAction
         if (isset($data['items'])) {
             $this->validateItems->execute($data['items'], $providerId);
         }
-        if (isset($data['freelancers'])) {
-            $this->validateFreelancers->execute($data['freelancers'], $providerId);
+
+        // الخطوة 8: إعادة فحص تعارض التواريخ عند التحديث.
+        // يجب الفحص في حالتين: 
+        // 1) إذا تم إرسال قائمة فريلانسرز جديدة.
+        // 2) أو إذا تم تغيير تواريخ التنسيق (availabilities/date_range) وكان هناك فريلانسرز مربوطون مسبقاً.
+        $freelancers = $data['freelancers'] ?? null;
+        $newDates = $this->extractArrangementDates($data);
+
+        // إذا لم يتم إرسال فريلانسرز جدد، نتحقق من الفريلانسرز الحاليين المرتبطين بالتنسيق
+        if (!$freelancers && !empty($newDates)) {
+            $variant = $listing->variants()->first();
+            if ($variant) {
+                $freelancers = $variant->packageFreelancers->map(fn($pf) => [
+                    'freelancer_id' => $pf->freelancer_id,
+                    'contract_id'   => $pf->contract_id,
+                ])->toArray();
+            }
+        }
+
+        if (!empty($freelancers)) {
+            // نمرر التواريخ (سواء الجديدة أو الحالية إذا لم تتغير) للفحص
+            $checkDates = !empty($newDates) ? $newDates : $this->getCurrentArrangementDates($listing);
+            $this->validateFreelancers->execute($freelancers, $providerId, $checkDates);
         }
 
         return DB::transaction(function () use ($listing, $data, $providerId) {
@@ -118,5 +139,44 @@ class UpdateArrangementAction
                 'images', 'category', 'district',
             ]);
         });
+    }
+
+    /**
+     * استخراج قائمة تواريخ التنسيق المسطّحة (Y-m-d) من البيانات المدخلة.
+     */
+    private function extractArrangementDates(array $data): array
+    {
+        if (!empty($data['availabilities'])) {
+            return collect($data['availabilities'])
+                ->pluck('available_date')
+                ->map(fn($d) => \Illuminate\Support\Carbon::parse($d)->format('Y-m-d'))
+                ->unique()
+                ->values()
+                ->toArray();
+        }
+
+        if (!empty($data['date_range'])) {
+            return collect($this->syncAvailabilities->buildAvailabilitiesFromRange($data['date_range']))
+                ->pluck('available_date')
+                ->unique()
+                ->values()
+                ->toArray();
+        }
+
+        return [];
+    }
+
+    /**
+     * جلب التواريخ الحالية المسجلة للتنسيق في قاعدة البيانات.
+     */
+    private function getCurrentArrangementDates(Listing $listing): array
+    {
+        $variant = $listing->variants()->first();
+        if (!$variant) return [];
+
+        return $variant->availabilities()
+            ->pluck('available_date')
+            ->map(fn($d) => $d->format('Y-m-d'))
+            ->toArray();
     }
 }

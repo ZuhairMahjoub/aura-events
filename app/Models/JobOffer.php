@@ -12,7 +12,7 @@ class JobOffer extends Model
     use HasUlids , HasFactory;
 
     protected $fillable = [
-        'company_id', 'job_title', 'time_condition', 'event_type', 
+        'company_id', 'service_id', 'job_title', 'time_condition', 'event_type', 
         'job_start_date', 'application_deadline', 'salary', 
         'payment_system', 'specific_event_association', 'experience_level', 
         'company_equipment_provided', 'job_requirements_and_scope', 'contact_info'

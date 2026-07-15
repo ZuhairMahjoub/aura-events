@@ -42,8 +42,9 @@ class JobOfferService
     {
         return CompanyFreelancerContract::where('company_id', $companyId)
             ->with([
-                'freelancer.user:id,first_name,last_name,email', 
-                'jobOffer:id,job_title'
+                'freelancer.user:id,first_name,last_name,email',
+                'jobOffer:id,job_title,service_id',
+                'jobOffer.service:id,name,description'
             ])
             ->orderBy('created_at', 'desc')
             ->get();

@@ -25,7 +25,11 @@ class CreateArrangementAction
             $this->validateItems->execute($data['items'], $providerId);
         }
         if (! empty($data['freelancers'])) {
-            $this->validateFreelancers->execute($data['freelancers'], $providerId);
+            $this->validateFreelancers->execute(
+                $data['freelancers'],
+                $providerId,
+                $this->extractArrangementDates($data)
+            );
         }
 
         return DB::transaction(function () use ($data, $providerId) {
@@ -83,6 +87,33 @@ class CreateArrangementAction
                 'district',
             ]);
         });
+    }
+
+    /**
+     * الخطوة 7: استخراج قائمة تواريخ التنسيق المسطّحة (Y-m-d) من إما
+     * availabilities الصريحة أو date_range، حتى نفحص تعارضها مع روزنامة
+     * الفريلانسر قبل أي حفظ فعلي.
+     */
+    private function extractArrangementDates(array $data): array
+    {
+        if (! empty($data['availabilities'])) {
+            return collect($data['availabilities'])
+                ->pluck('available_date')
+                ->map(fn ($d) => \Illuminate\Support\Carbon::parse($d)->format('Y-m-d'))
+                ->unique()
+                ->values()
+                ->toArray();
+        }
+
+        if (! empty($data['date_range'])) {
+            return collect($this->syncAvailabilities->buildAvailabilitiesFromRange($data['date_range']))
+                ->pluck('available_date')
+                ->unique()
+                ->values()
+                ->toArray();
+        }
+
+        return [];
     }
 
     private function attachImages(array $tempPaths, Listing $listing): void
