@@ -34,4 +34,8 @@ public function provider()
 {
     return $this->belongsTo(\App\Models\Provider::class, 'company_id');
 }
+    public function service(): BelongsTo
+    {
+        return $this->belongsTo(Service::class);
+    }
 }

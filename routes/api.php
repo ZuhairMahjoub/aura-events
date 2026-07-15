@@ -26,6 +26,7 @@ use App\Http\Controllers\ProviderController;
 use App\Http\Controllers\CompanyDetailController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\ReviewController;
+use App\Http\Controllers\ServiceController;
 
 
 Route::prefix('auth')->group(function () {
@@ -86,11 +87,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         });
     });
     Route::middleware('approved_provider')->group(function () {
-        Route::post('/job-offers', [JobOfferController::class, 'store']);
-        Route::get('/company/applicants', [JobOfferController::class, 'getApplicants']);
-        Route::put('/contracts/{id}/status', [JobOfferController::class, 'updateApplicantStatus']);
 
-        Route::post('/job-offers/{id}/apply', [JobOfferController::class, 'apply']);
         Route::get('/provider/inventory', [ListingController::class, 'getCompanyInventory']);
 
 
@@ -107,7 +104,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('provider/my-products', [ListingController::class, 'getCompanyProducts']);
         Route::get('/provider/available-freelancers', [ArrangementController::class, 'getFreelancersList']);
         Route::get('/job-offers', [JobOfferController::class, 'index']);
-    });Route::get('/job-offers/{id}', [JobOfferController::class, 'show']);
+    });
+    Route::get('/job-offers/{id}', [JobOfferController::class, 'show']);
     Route::get('/my-applied-jobs', [JobOfferController::class, 'getAppliedJobs']);
 });
 Route::middleware('auth:sanctum')->group(function () {
@@ -174,7 +172,21 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/favorites/{listingId}/toggle', [FavoriteController::class, 'toggle']);
     Route::get('/favorites', [FavoriteController::class, 'index']);
 
-Route::post('/reviews/provider', [ReviewController::class, 'reviewProvider']);   // المنظم يقيّم المزود
-Route::post('/reviews/organizer', [ReviewController::class, 'reviewOrganizer']); // المزود يقيّم المنظم
-Route::get('/providers/{providerId}/reviews', [ReviewController::class, 'providerReviews']);
+    Route::post('/reviews/provider', [ReviewController::class, 'reviewProvider']);   // المنظم يقيّم المزود
+    Route::post('/reviews/organizer', [ReviewController::class, 'reviewOrganizer']); // المزود يقيّم المنظم
+    Route::get('/providers/{providerId}/reviews', [ReviewController::class, 'providerReviews']);
+});
+Route::middleware(['auth:sanctum', 'approved_provider', 'provider_type:company'])->group(function () {
+    Route::get('/services', [ServiceController::class, 'index']);
+    Route::post('/services', [ServiceController::class, 'store']);
+    Route::put('/services/{id}', [ServiceController::class, 'update']);
+    Route::delete('/services/{id}', [ServiceController::class, 'destroy']);
+});
+Route::middleware(['auth:sanctum', 'approved_provider', 'provider_type:company'])->group(function () {
+    Route::post('/job-offers', [JobOfferController::class, 'store']);
+    Route::get('/company/applicants', [JobOfferController::class, 'getApplicants']);
+    Route::put('/contracts/{id}/status', [JobOfferController::class, 'updateApplicantStatus']);
+});
+Route::middleware(['auth:sanctum', 'approved_provider', 'provider_type:freelancer'])->group(function () {
+    Route::post('/job-offers/{id}/apply', [JobOfferController::class, 'apply']);
 });

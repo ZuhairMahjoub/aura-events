@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
@@ -47,41 +48,42 @@ class ArrangementResource extends JsonResource
             'currency'   => $variant?->currency,
             'capacity'   => $variant?->dynamic_attributes['capacity'] ?? null,
 
+
             // ── Package items (products / halls / services) ──────────────────
-           'items' => $this->whenloaded('variants', function () use ($variant): array {
-               if (! $variant) {
-                   return [];
-               }
+            'items' => $this->whenloaded('variants', function () use ($variant): array {
+                if (! $variant) {
+                    return [];
+                }
 
-               return $variant->packageitems
-                   ->map(function ($item) {
-                       // سحب صورة النسخة (اللون) مباشرة عبر الـ accessor full_url
-                       $variantimageurl = null;
-                       if ($item->includedvariant && $item->includedvariant->relationloaded('images') && $item->includedvariant->images->isnotempty()) {
-                           $variantimageurl = $item->includedvariant->images->first()->full_url;
-                       }
+                return $variant->packageitems
+                    ->map(function ($item) {
+                        // سحب صورة النسخة (اللون) مباشرة عبر الـ accessor full_url
+                        $variantimageurl = null;
+                        if ($item->includedvariant && $item->includedvariant->relationloaded('images') && $item->includedvariant->images->isnotempty()) {
+                            $variantimageurl = $item->includedvariant->images->first()->full_url;
+                        }
 
-                       return [
-                           'id'         => $item->id,
-                           'quantity'   => $item->quantity,
+                        return [
+                            'id'         => $item->id,
+                            'quantity'   => $item->quantity,
 
-                           'variant' => $item->includedvariant ? [
-                               'id'           => $item->includedvariant->id,
-                               'variant_name' => $item->includedvariant->variant_name,
-                               'price'        => (float) $item->includedvariant->price,
-                               'currency'     => $item->includedvariant->currency,
-                               'image'        => $variantimageurl,
-                               'listing'      => $item->includedvariant->listing ? [
-                                   'id'           => $item->includedvariant->listing->id,
-                                   'title'        => $item->includedvariant->listing->title,
-                                   'listing_type' => $item->includedvariant->listing->listing_type,
-                               ] : null,
-                           ] : null,
-                       ];
-                   })
-                   ->values()
-                   ->toarray();
-           }),
+                            'variant' => $item->includedvariant ? [
+                                'id'           => $item->includedvariant->id,
+                                'variant_name' => $item->includedvariant->variant_name,
+                                'price'        => (float) $item->includedvariant->price,
+                                'currency'     => $item->includedvariant->currency,
+                                'image'        => $variantimageurl,
+                                'listing'      => $item->includedvariant->listing ? [
+                                    'id'           => $item->includedvariant->listing->id,
+                                    'title'        => $item->includedvariant->listing->title,
+                                    'listing_type' => $item->includedvariant->listing->listing_type,
+                                ] : null,
+                            ] : null,
+                        ];
+                    })
+                    ->values()
+                    ->toarray();
+            }),
 
             // ── Contract-linked freelancers ───────────────────────────────────
             'freelancers' => $this->whenLoaded('variants', function () use ($variant): array {
@@ -90,7 +92,7 @@ class ArrangementResource extends JsonResource
                 }
 
                 return $variant->packageFreelancers
-                    ->map(fn ($pf) => [
+                    ->map(fn($pf) => [
                         'id'            => $pf->id,
                         'freelancer_id' => $pf->freelancer_id,
                         'contract_id'   => $pf->contract_id,
@@ -98,10 +100,16 @@ class ArrangementResource extends JsonResource
                             'id'         => $pf->freelancer->id,
                             'brand_name' => $pf->freelancer->brand_name,
                         ] : null,
+                        'service' => $pf->contract?->jobOffer?->service ? [
+                            'id'          => $pf->contract->jobOffer->service->id,
+                            'name'        => $pf->contract->jobOffer->service->name,
+                            'description' => $pf->contract->jobOffer->service->description,
+                        ] : null,
                     ])
                     ->values()
                     ->toArray();
             }),
+
 
             // ── Images ───────────────────────────────────────────────────────
             'images' => $this->relationLoaded('images')
