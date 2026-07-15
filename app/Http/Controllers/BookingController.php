@@ -51,6 +51,7 @@ class BookingController extends Controller
         $booking = \App\Models\Booking::findOrFail($bookingId);
         Gate::authorize('cancel', $booking);
 
+        // إصلاح: القيمة يجب أن تطابق الـ ENUM المُوسَّع (organizer|provider|admin|system)
         $cancelledBy = $request->user()->hasRole('provider') ? 'provider' : 'organizer';
 
         $booking = $this->bookingService->cancel(
@@ -97,7 +98,9 @@ class BookingController extends Controller
     public function accept(string $bookingId): JsonResponse
     {
         $booking = \App\Models\Booking::findOrFail($bookingId);
+
         Gate::authorize('accept', $booking);
+
 
         $providerId = request()->user()->providerProfile->id;
 
@@ -174,9 +177,33 @@ class BookingController extends Controller
             'success' => true,
             'message' => 'تم تغيير حالة الحجز إلى مكتمل بنجاح.',
             'data'    => $booking,
-            'completed_at' => now()
         ]);
     }
+ public function reject(string $bookingId): JsonResponse
+{
+    // إصلاح حرج: كان هذا الميثود يكرر منطق BookingService::reject() بشكل
+    // خاطئ ومستقل تماماً عنه، ما تسبب في:
+    // 1) عدم التحقق من ملكية provider_id للحجز قبل الرفض.
+    // 2) عدم التحقق من أن status = 'pending' قبل السماح بالرفض.
+    // 3) increment('remaining_capacity') بقيمة 1 ثابتة، متجاهلاً quantity
+    //    الفعلية للحجز — يُفسد السعة الاستيعابية لأي حجز بكمية > 1.
+    // 4) عدم استدعاء releaseCapacity() الموحدة، فلا يُعاد stock_quantity
+    //    في حالة physical_product إطلاقاً.
+    //
+    // الحل: تفويض المنطق بالكامل إلى BookingService::reject() الذي يطبّق
+    // كل هذه الفحوصات تحت lockForUpdate صحيح.
+    $booking = Booking::findOrFail($bookingId);
+
+    Gate::authorize('reject', $booking);
+
+    $providerId = request()->user()->providerProfile->id;
+
+    $booking = $this->bookingService->reject(
+        $bookingId,
+        $providerId,
+        request()->input('reason')
+    );
+=======
     public function reject(string $bookingId, string $providerId, ?string $reason): Booking
     {
         return DB::transaction(function () use ($bookingId, $providerId, $reason) {
@@ -196,7 +223,10 @@ class BookingController extends Controller
          __('notif_booking_rejected_body', ['reason' => $reason]),
           ['action' => 'booking_rejected', 'booking_id' => $booking->id]    );
 
-            return $booking;   //  لا استدعاء لـ releaseCapacity() نهائياً!
-        });
-    }
+    return response()->json([
+        'success' => true,
+        'message' => 'تم رفض الحجز بنجاح.',
+        'data'    => $booking,
+    ]);
+}
 }

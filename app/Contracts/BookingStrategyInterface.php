@@ -19,4 +19,7 @@ interface BookingStrategyInterface
 
     
     public function buildTypeMetadata(BookingData $data): array;
+
+
+    public function release(Booking $booking): void;
 }

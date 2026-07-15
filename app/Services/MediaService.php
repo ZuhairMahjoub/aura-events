@@ -23,7 +23,7 @@ class MediaService
     public function storeTempUpload(UploadedFile $file): string
     {
         $filename = (string) Str::ulid() . '.' . $file->getClientOriginalExtension();
-        
+
         // رفع الملف مباشرة باستخدام Facade التخزين إلى مجلد temp داخل القرص العام
         $tempPath = $file->storeAs('temp', $filename, self::DISK);
 
@@ -44,15 +44,18 @@ class MediaService
         string  $destinationDir,
         ?string $altText = null
     ): Image {
-        
+
         // التحقق من وجود الملف المؤقت داخل القرص
         if (!Storage::disk(self::DISK)->exists($tempPath)) {
             throw new FileNotFoundException("الملف المؤقت غير موجود في القرص: {$tempPath}");
         }
 
         $filename = basename($tempPath);
-        
-        // المسار النهائي الموحد داخل القرص الدائم
+
+        if (empty(trim($destinationDir, '/'))) {
+            throw new \InvalidArgumentException("destinationDir لا يمكن أن يكون فارغاً.");
+        }
+
         $finalPath = self::BASE_DIR . '/' . trim($destinationDir, '/') . '/' . $filename;
 
         // نقل الملف بأمان عبر نظام الـ Storage التابع للارفيل

@@ -34,10 +34,11 @@ public function getCompanyInventory(Request $request): JsonResponse
         }
 
         // 1. جلب الصالات (Halls) مع علاقاتها الخاصة (مثل الحجوزات أو الميزات إن وجدت)
-        $halls = Listing::where('provider_id', $provider->id)
-           ->with(['images', 'category', 'district', 'variants.images', 'variants.availabilities.slots'])->latest()
-            ->get();
-
+      $halls = Listing::where('provider_id', $provider->id)
+    ->where('listing_type', 'service') // ✅ فلتر النوع
+    ->with(['images', 'category', 'district', 'variants.images', 'variants.availabilities.slots'])
+    ->latest()
+    ->get();
         // 2. جلب المنتجات المادية (Physical Products)
         $products = Listing::where('provider_id', $provider->id)
             ->where('listing_type', 'physical_product')
@@ -116,7 +117,7 @@ public function getCompanyInventory(Request $request): JsonResponse
 
     return response()->json([
         'message' => 'Hall and its custom packages synchronized successfully!',
-        'data'    => $updatedListing
+        'data'    => new ListingResource($updatedListing)
     ], 200);
 }
 
@@ -149,22 +150,23 @@ public function destroy(Listing $listing): JsonResponse
         ], Response::HTTP_INTERNAL_SERVER_ERROR);
     }}
 
-    public function show(string $id, Request $request)
-    {
-        $listing = Listing::with([
-            'images', 
-            'variants.packageItems.includedVariant.listing',
-            'variants.packageFreelancers.freelancer',
-            'category',
-            'district'
-        ])->findOrFail($id);
+    public function show(string $id, Request $request): JsonResponse
+{
+    $listing = Listing::with([
+        'images',
+        'category',
+        'district',
+        'variants.images',
+        'variants.availabilities.slots',
+        'variants.packageItems.includedVariant.listing',
+        'variants.packageFreelancers.freelancer',
+    ])->findOrFail($id);
 
-     
-        return response()->json([
-            'status' => 'success',
-            'data' => $listing
-        ]);
-    }
+    return response()->json([
+        'success' => true,
+        'data'    => new ListingResource($listing)
+    ]);
+}
     /**
  * GET /provider/my-products
  * جلب المنتجات المادية (Physical Products) الخاصة بالشركة الحالية فقط

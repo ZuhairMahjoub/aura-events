@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('currency', 3)->default('USD');
             $table->enum('price_type', ['fixed', 'hourly'])->default('fixed');
             $table->integer('stock_quantity')->nullable();
+            $table->integer('capacity')->nullable();
             
             $table->json('dynamic_attributes')->nullable(); 
             

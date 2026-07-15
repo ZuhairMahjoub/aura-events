@@ -8,7 +8,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * Transforms a Listing (package type) into a clean API response.
  *
  * Expects eager-loaded relations:
- * ->load(['variants.packageItems.includedVariant.listing', 'variants.packageFreelancers.freelancer', 'images', 'category', 'district'])
+ * ->load(['variants.packageItems.includedVariant.listing', 'variants.packageFreelancers.freelancer', 'variants.availabilities.slots', 'images', 'category', 'district'])
  */
 class ArrangementResource extends JsonResource
 {
@@ -24,20 +24,19 @@ class ArrangementResource extends JsonResource
             'listing_type' => $this->listing_type, // always "package"
 
             'category' => $this->whenLoaded('category', function () {
-        return [
-             'id' => $this->category->id,
-        // تأكدي من إرجاع الاسم باللغتين كما في المنتجات
-             'name_en' => $this->category->name_en ?? $this->category->name, 
-             'name_ar' => $this->category->name_ar ?? $this->category->name,
-               ];
-                            }),
+                return [
+                    'id'      => $this->category->id,
+                    'name_en' => $this->category->name_en ?? $this->category->name,
+                    'name_ar' => $this->category->name_ar ?? $this->category->name,
+                ];
+            }),
             'district' => $this->whenLoaded('district', function () {
-         return [
-            'id' => $this->district->id,
-            'name_en' => $this->district->name_en ?? $this->district->name,
-            'name_ar' => $this->district->name_ar ?? $this->district->name,
-               ];
-        }),
+                return [
+                    'id'      => $this->district->id,
+                    'name_en' => $this->district->name_en ?? $this->district->name,
+                    'name_ar' => $this->district->name_ar ?? $this->district->name,
+                ];
+            }),
 
             'moderation_status' => $this->moderation_status,
 
@@ -49,51 +48,48 @@ class ArrangementResource extends JsonResource
             'capacity'   => $variant?->dynamic_attributes['capacity'] ?? null,
 
             // ── Package items (products / halls / services) ──────────────────
-           'items' => $this->whenLoaded('variants', function () use ($variant): array {
-        if (! $variant) {
-        return [];
-         }
+           'items' => $this->whenloaded('variants', function () use ($variant): array {
+               if (! $variant) {
+                   return [];
+               }
 
-    return $variant->packageItems
-        ->map(function ($item) {
-            // 💡 1. سحب الصورة من النسخة (اللون) مباشرة
-            $variantImageUrl = null;
-            if ($item->includedVariant && $item->includedVariant->relationLoaded('images') && $item->includedVariant->images->isNotEmpty()) {
-                // استخدمي asset() أو الطريقة التي تستخدمينها لعرض الروابط
-                $variantImageUrl = asset('storage/' . $item->includedVariant->images->first()->path); 
-            }
+               return $variant->packageitems
+                   ->map(function ($item) {
+                       // سحب صورة النسخة (اللون) مباشرة عبر الـ accessor full_url
+                       $variantimageurl = null;
+                       if ($item->includedvariant && $item->includedvariant->relationloaded('images') && $item->includedvariant->images->isnotempty()) {
+                           $variantimageurl = $item->includedvariant->images->first()->full_url;
+                       }
 
-            return [
-                'id'         => $item->id,
-                'variant_id' => $item->included_variant_id,
-                'quantity'   => $item->quantity,
+                       return [
+                           'id'         => $item->id,
+                           'quantity'   => $item->quantity,
 
-                'variant' => $item->includedVariant ? [
-                    'id'           => $item->includedVariant->id,
-                    'variant_name' => $item->includedVariant->variant_name,
-                    'price'        => (float) $item->includedVariant->price,
-                    'currency'     => $item->includedVariant->currency,
-                    
-                    // 💡 2. إرفاق صورة اللون هنا
-                    'image'        => $variantImageUrl, 
-                    
-                    'listing'      => $item->includedVariant->listing ? [
-                        'id'           => $item->includedVariant->listing->id,
-                        'title'        => $item->includedVariant->listing->title,
-                        'listing_type' => $item->includedVariant->listing->listing_type,
-                    ] : null,
-                ] : null,
-            ];
-        })
-        ->values()
-        ->toArray();
-}),
+                           'variant' => $item->includedvariant ? [
+                               'id'           => $item->includedvariant->id,
+                               'variant_name' => $item->includedvariant->variant_name,
+                               'price'        => (float) $item->includedvariant->price,
+                               'currency'     => $item->includedvariant->currency,
+                               'image'        => $variantimageurl,
+                               'listing'      => $item->includedvariant->listing ? [
+                                   'id'           => $item->includedvariant->listing->id,
+                                   'title'        => $item->includedvariant->listing->title,
+                                   'listing_type' => $item->includedvariant->listing->listing_type,
+                               ] : null,
+                           ] : null,
+                       ];
+                   })
+                   ->values()
+                   ->toarray();
+           }),
+
             // ── Contract-linked freelancers ───────────────────────────────────
             'freelancers' => $this->whenLoaded('variants', function () use ($variant): array {
                 if (! $variant) {
                     return [];
                 }
-return $variant->packageFreelancers
+
+                return $variant->packageFreelancers
                     ->map(fn ($pf) => [
                         'id'            => $pf->id,
                         'freelancer_id' => $pf->freelancer_id,
@@ -111,11 +107,29 @@ return $variant->packageFreelancers
             'images' => $this->relationLoaded('images')
                 ? $this->images->map(fn($img) => [
                     'id'  => $img->id,
-                    'url' => asset($img->path), // التعديل الآمن: يجلب الرابط كاملاً بالدومين المحلي أو الحقيقي للملف
-                    'alt' => $img->alt_text
+                    'url' => $img->full_url,
+                    'alt' => $img->alt_text,
                 ])->values()->toArray()
                 : [],
-            'availabilities'           => $this->variants->first() ? $this->variants->first()->availabilities : [],
+
+            // ── Availabilities (نفس تنسيق ListingResource تماماً) ─────────────
+            'availabilities' => $variant && $variant->relationLoaded('availabilities')
+                ? $variant->availabilities->map(fn($availability) => [
+                    'id'             => $availability->id,
+                    'available_date' => $availability->available_date,
+                    'is_blocked'     => (bool) $availability->is_blocked,
+                    'slots' => $availability->relationLoaded('slots')
+                        ? $availability->slots->map(fn($slot) => [
+                            'id'                 => $slot->id,
+                            'name'               => $slot->slot_name,
+                            'start_time'         => $slot->start_time,
+                            'end_time'           => $slot->end_time,
+                            'remaining_capacity' => (int) $slot->remaining_capacity,
+                        ])->values()->toArray()
+                        : [],
+                ])->values()->toArray()
+                : [],
+
             // ── Cancellation policies ─────────────────────────────────────────
             'cancel_policies' => [
                 'before_acceptance' => (bool) $this->cancel_before_acceptance,

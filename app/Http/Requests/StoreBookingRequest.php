@@ -20,6 +20,8 @@ class StoreBookingRequest extends FormRequest
             'quantity'           => ['required', 'integer', 'min:1'],
             'metadata'           => ['nullable', 'array'],
             'customer_notes'     => ['nullable', 'string', 'max:1000'],
+            'booked_start_time'          => ['nullable', 'date_format:H:i'],
+            'booked_end_time'            => ['nullable', 'date_format:H:i'],
         ];
     }
 }

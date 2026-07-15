@@ -30,7 +30,8 @@ class ArrangementStoreRequest extends FormRequest
 
             // ── Variant / pricing ────────────────────────────────────────────
             'price'      => 'required|numeric|min:0|max:999999.99',
-            'price_type' => 'required|in:fixed,per_hour,per_day',
+            'price_type' => 'required|in:fixed,hourly',
+            'currency'   => 'required|string|size:3',
             'capacity'   => 'nullable|integer|min:1|max:10000',
 
             // ── Cancellation policies ────────────────────────────────────────
@@ -51,15 +52,37 @@ class ArrangementStoreRequest extends FormRequest
             'freelancers.*.contract_id'       => 'required_with:freelancers|string|exists:company_freelancer_contracts,id',
 
             // ── Images (temp paths from POST /uploads/temp) ──────────────────
-            'images'   => 'nullable|array|max:10',
-            'images.*' => 'string|regex:/^temp\/[a-zA-Z0-9\-_.]+$/',
-
+           'images.*'             => ['nullable', 'array'],
+            'images.*.id'          => ['nullable', 'string'],
+            'images.*.path'        => ['nullable', 'string'],
             'currency'   => 'required|string|size:3',
+
+            // ⚠️ إصلاح: كان اسم الحقل هون 'date' بدل 'available_date'
+            // (غير متطابق مع ArrangementUpdateRequest)، وهيك كان أي
+            // إرسال لـ availabilities بالإنشاء ينعدّى الـ validation
+            // بس بلا أي تأثير فعلي — لأن CreateArrangementAction كانت
+            // أصلاً بتقرأ 'available_date' مش 'date'.
             'availabilities'                       => 'nullable|array',
-            'availabilities.*.date'                => 'required_with:availabilities|date_format:Y-m-d',
+            'availabilities.*.id'                  => 'nullable|string',
+            'availabilities.*.available_date'      => 'required_with:availabilities|date_format:Y-m-d|after_or_equal:today',
+            'availabilities.*.is_blocked'          => 'nullable|boolean',
             'availabilities.*.slots'               => 'nullable|array',
+            'availabilities.*.slots.*.id'          => 'nullable|string',
             'availabilities.*.slots.*.start_time'  => 'required_with:availabilities.*.slots|date_format:H:i',
-            'availabilities.*.slots.*.end_time'    => 'required_with:availabilities.*.slots|date_format:H:i',
+            'availabilities.*.slots.*.end_time'    => 'required_with:availabilities.*.slots|date_format:H:i|after:availabilities.*.slots.*.start_time',
+            'availabilities.*.slots.*.remaining_capacity' => 'nullable|integer|min:1',
+
+            'date_range'                             => 'nullable|array',
+            'date_range.start_date'                  => 'required_with:date_range|date_format:Y-m-d',
+            'date_range.end_date'                    => 'required_with:date_range|date_format:Y-m-d|after_or_equal:date_range.start_date',
+            'date_range.is_blocked'                  => 'boolean',
+            'date_range.slots'                       => 'nullable|array',
+            'date_range.slots.*.slot_name'           => 'required_with:date_range.slots|array',
+            'date_range.slots.*.slot_name.en'        => 'string|max:255',
+            'date_range.slots.*.slot_name.ar'        => 'string|max:255',
+            'date_range.slots.*.start_time'          => 'required_with:date_range.slots|date_format:H:i',
+            'date_range.slots.*.end_time'            => 'required_with:date_range.slots|date_format:H:i',
+            'date_range.slots.*.remaining_capacity'  => 'integer|min:0',
         ];
     }
 

@@ -65,4 +65,14 @@ public function getProfileAttribute()
     {
         return $this->hasMany(Booking::class);
     }
+    // في كلا الموديلين
+public function reviewsReceived()
+{
+    return $this->morphMany(Review::class, 'reviewee');
+}
+
+public function reviewsGiven()
+{
+    return $this->morphMany(Review::class, 'reviewer');
+}
 }

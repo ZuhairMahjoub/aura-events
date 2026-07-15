@@ -8,6 +8,7 @@ use App\Models\ListingVariant;
 use App\Models\ListingSlot;
 use App\Models\Booking;
 use Illuminate\Validation\ValidationException;
+use App\Models\ListingAvailability;
 
 /**
  * استراتيجية حجز المنتجات المادية (Physical Products)
@@ -68,21 +69,17 @@ class PhysicalProductBookingStrategy implements BookingStrategyInterface
 
     public function reserveCapacity(BookingData $data): void
     {
-        // جلب المتغير للتحقق من نوع السعر والمخزون
         $variant = ListingVariant::lockForUpdate()->findOrFail($data->variantId);
 
-        // التحقق من المخزون (null يعني مخزون غير محدود)
         if ($variant->stock_quantity !== null) {
             if ($variant->stock_quantity < $data->quantity) {
                 throw ValidationException::withMessages([
                     'quantity' => "الكمية المطلوبة ({$data->quantity}) تتجاوز المخزون المتاح ({$variant->stock_quantity}).",
                 ]);
             }
-            // تخفيض المخزون
             $variant->decrement('stock_quantity', $data->quantity);
         }
 
-        // إذا كان السعر بالساعة، احجز الـ slot أيضاً
         if ($variant->price_type === 'hourly' && !empty($data->slotId)) {
             $slot = ListingSlot::lockForUpdate()->findOrFail($data->slotId);
 
@@ -96,29 +93,92 @@ class PhysicalProductBookingStrategy implements BookingStrategyInterface
         }
     }
 
-    public function buildTimeSnapshot(BookingData $data): array
-    {
-        // جلب المتغير للتحقق من نوع السعر
-        $variant = ListingVariant::find($data->variantId);
+  public function buildTimeSnapshot(BookingData $data): array
+{
+    // 1. جلب الـ variant للتحقق من نوع السعر
+    $variant = ListingVariant::find($data->variantId);
 
-        // إذا كان السعر بالساعة، احفظ بيانات الوقت
-        if ($variant?->price_type === 'hourly' && !empty($data->slotId)) {
-            $slot = ListingSlot::find($data->slotId);
-            return [
-                'booked_date'       => $data->bookedDate,
-                'booked_start_time' => $slot?->start_time?->format('H:i:s'),
-                'booked_end_time'   => $slot?->end_time?->format('H:i:s'),
-            ];
+    if (!$variant) {
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'variant_id' => ['العرض أو المنتج المطلوب غير موجود.']
+        ]);
+    }
+
+    // تأمين صيغة التاريخ المرسل مسبقاً لاستخدامه في الحالتين (Fixed أو Hourly)
+    $requestedDate = $data->bookedDate instanceof \Carbon\Carbon 
+        ? $data->bookedDate->format('Y-m-d') 
+        : \Carbon\Carbon::parse($data->bookedDate)->format('Y-m-d');
+
+    // 2. إذا كان السعر بالساعة، نقوم بجلب الـ slot وعمل التحققات الشاملة للوقت والتاريخ
+    if ($variant->price_type === 'hourly' && !empty($data->slotId)) {
+        
+        // جلب الـ slot مع علاقة الـ availability بضربة واحدة لتسريع الأداء
+        $slot = $this->lockedSlot ?? ListingSlot::with('availability')->find($data->slotId);
+
+        if (!$slot || !$slot->availability) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'slot_id' => ['الفترة الزمنية المطلوبة غير موجودة أو غير متاحة حالياً.']
+            ]);
         }
 
-        // إذا كان السعر ثابت، لا تحفظ أوقات محددة
+        // تحقق: هل هذا الـ slot ينتمي فعلاً لنفس المنتج المحدد؟
+        if ($slot->availability->listing_variant_id !== $variant->id) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'slot_id' => ['الفترة الزمنية المحددة لا تنتمي لهذا العرض.']
+            ]);
+        }
+
+        // تحقق: هل اليوم مغلق يدوياً من الـ Vendor؟
+        if ($slot->availability->is_blocked) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'booked_date' => ['عذراً، هذا اليوم تم إغلاقه من قبل مقدم الخدمة.']
+            ]);
+        }
+
+        // تحقق: السعة المتبقية للفترة
+        if ($slot->remaining_capacity <= 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'slot_id' => ['عذراً، هذه الفترة ممتلئة بالكامل ولا توجد سعة متبقية.']
+            ]);
+        }
+
+        // تحقق: مطابقة التاريخ المرسل مع تاريخ الـ availability في قاعدة البيانات
+        $availableDate = $slot->availability->available_date instanceof \Carbon\Carbon 
+            ? $slot->availability->available_date->format('Y-m-d') 
+            : \Carbon\Carbon::parse($slot->availability->available_date)->format('Y-m-d');
+
+        if ($requestedDate !== $availableDate) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'booked_date' => ['التاريخ المحدد لا يطابق يوم الفترة الزمنية المتاحة في قاعدة البيانات.']
+            ]);
+        }
+
+        // [إصلاح حرج]: إرجاع الأوقات مباشرة بدون ->format() لأنها مخزنة كنصوص "HH:MM:SS"
         return [
-            'booked_date'       => $data->bookedDate, // تاريخ التسليم المطلوب إن وجد
-            'booked_start_time' => null,
-            'booked_end_time'   => null,
+            'booked_date'       => $availableDate,
+            'booked_start_time' => $slot->start_time, 
+            'booked_end_time'   => $slot->end_time,
         ];
     }
 
+    // 3. إذا كان السعر ثابت (Fixed)، نتحقق فقط من إتاحة اليوم وحظر مقدم الخدمة له إن وُجدت الإتاحة
+    $availability = ListingAvailability::where('listing_variant_id', $variant->id)
+        ->where('available_date', $requestedDate)
+        ->first();
+
+    if ($availability && $availability->is_blocked) {
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'booked_date' => ['عذراً، هذا اليوم تم إغلاقه من قبل مقدم الخدمة ولا يستقبل حجوزات ثابتة.']
+        ]);
+    }
+
+    // إرجاع أوقات فارغة للسعر الثابت كما كنت تفعل سابقاً
+    return [
+        'booked_date'       => $requestedDate, 
+        'booked_start_time' => null,
+        'booked_end_time'   => null,
+    ];
+}
     public function buildTypeMetadata(BookingData $data): array
     {
         // جلب المتغير للتحقق من نوع السعر
@@ -130,5 +190,21 @@ class PhysicalProductBookingStrategy implements BookingStrategyInterface
             'delivery_address' => $data->metadata['delivery_address'] ?? null,
             'price_type'       => $variant?->price_type ?? 'fixed', // حفظ نوع السعر للمرجعية
         ];
+    }
+
+  
+    public function release(Booking $booking): void
+    {
+        $variant = ListingVariant::lockForUpdate()->find($booking->listing_variant_id);
+
+        if ($variant && $variant->stock_quantity !== null) {
+            $variant->increment('stock_quantity', $booking->quantity);
+        }
+
+        if ($booking->listing_slot_id) {
+            ListingSlot::lockForUpdate()
+                ->find($booking->listing_slot_id)
+                ?->increment('remaining_capacity', $booking->quantity);
+        }
     }
 }

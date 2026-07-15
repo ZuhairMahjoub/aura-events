@@ -25,6 +25,8 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrganizerController;
 use App\Http\Controllers\ProviderController;
 use App\Http\Controllers\CompanyDetailController;
+use App\Http\Controllers\FavoriteController;
+use App\Http\Controllers\ReviewController;
    Route::middleware(['set_locale'])->group(function () {
 
 
@@ -47,7 +49,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
             return $request->user();
         });
         Route::post('/logout', [AuthController::class, 'logout']);
-         Route::get('/auth/profile', [AuthController::class, 'getProfile']);
+        Route::get('/auth/profile', [AuthController::class, 'getProfile']);
     });
 });
 
@@ -105,7 +107,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('provider/my-products', [ListingController::class, 'getCompanyProducts']);
         Route::get('/provider/available-freelancers', [ArrangementController::class, 'getFreelancersList']);
         Route::get('/job-offers', [JobOfferController::class, 'index']);
-    });
+    });Route::get('/job-offers/{id}', [JobOfferController::class, 'show']);
+    Route::get('/my-applied-jobs', [JobOfferController::class, 'getAppliedJobs']);
 });
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -117,14 +120,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/bookings', [BookingController::class, 'myBookings']); // عرض قائمة الحجوزات
     Route::get('/provider/bookings', [BookingController::class, 'providerBookings']); // عرض قائمة الحجوزات
 
-    Route::put('/bookings/{bookingId}/accept', [BookingController::class, 'accept']);
     Route::put('/bookings/{bookingId}/reject', [BookingController::class, 'reject']);
     Route::put('/bookings/{bookingId}/complete', [BookingController::class, 'complete']);
     Route::post('/bookings', [BookingController::class, 'store']);
 
     Route::post('/bookings/{bookingId}/cancel', [BookingController::class, 'cancel']);
 
-    Route::get('/bookings', [BookingController::class, 'index']); 
+    Route::get('/bookings', [BookingController::class, 'index']);
     Route::put('/bookings/{bookingId}/accept', [BookingController::class, 'accept'])
         ->middleware('approved_provider');
 });
@@ -172,6 +174,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/chat/initialize', [ChatController::class, 'initializeChat']);
 });
 Route::get('/providers', [ProviderController::class, 'getProviders']);
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/favorites/{listingId}/toggle', [FavoriteController::class, 'toggle']);
+    Route::get('/favorites', [FavoriteController::class, 'index']);
+
+Route::post('/reviews/provider', [ReviewController::class, 'reviewProvider']);   // المنظم يقيّم المزود
+Route::post('/reviews/organizer', [ReviewController::class, 'reviewOrganizer']); // المزود يقيّم المنظم
+Route::get('/providers/{providerId}/reviews', [ReviewController::class, 'providerReviews']);
+});
 
     
     // ضع مسارات العرض العام هنا لتعمل بدون تسجيل دخول

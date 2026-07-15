@@ -7,8 +7,7 @@ use App\Models\Listing;
 use App\Services\MediaService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use  Illuminate\Support\Facades\Storage;
-use StreamBucket;
+use Illuminate\Support\Facades\Storage;
 
 class TempUploadController extends Controller
 {
@@ -21,9 +20,15 @@ class TempUploadController extends Controller
         $tempPath = $mediaService->storeTempUpload($request->file('image'));
 
         return response()->json([
-            'message' => 'Image uploaded successfully to temporary storage.',
-            'temp_path' => $tempPath,
-            'url'       => asset('storage/' . $tempPath)
+            'message'    => 'Image uploaded successfully to temporary storage.',
+            // الحقل المتوقع فعلياً من ArrangementStoreRequest (images.*.path) هو
+            // 'path'، بينما هذا الـ endpoint كان يرجّع 'temp_path' فقط — أي
+            // frontend يمرّر نفس الـ response كما هو كان يرسل مفتاحاً غير
+            // موجود بالـ validation، فتُتجاهل الصورة بصمت بلا أي رسالة خطأ.
+            // أبقيت temp_path للتوافق الخلفي وأضفت path كمصدر حقيقة موحّد.
+            'temp_path'  => $tempPath,
+            'path'       => $tempPath,
+            'url'        => asset('storage/' . $tempPath)
         ], 201);
     }
     public function index(string $listingId): JsonResponse
@@ -39,7 +44,10 @@ class TempUploadController extends Controller
 
         $images = $listing->images->map(fn($img) => [
             'id'  => $img->id,
-            'url' => asset($img->path), // التعديل الآمن: يجلب الرابط كاملاً بالدومين المحلي أو الحقيقي للملف
+            // إصلاح: الـ accessor الفعلي على موديل Image هو full_url (بيتحول
+            // من fullUrl() حسب اتفاقية Laravel لتسمية الـ attributes)، وليس
+            // url — كانت نفس مشكلة ArrangementResource لكن بمكان تالت.
+            'url' => $img->full_url,
             'alt' => $img->alt_text
         ]);
 

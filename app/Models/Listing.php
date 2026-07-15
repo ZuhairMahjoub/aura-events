@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+
 use Spatie\Translatable\HasTranslations;
 
 class Listing extends Model
@@ -34,8 +36,7 @@ use HasUlids, HasFactory,HasTranslations;
     'secondary_contact_number',
     'is_provider_location_based',
     'status',
-    'rejection_reason',
-];
+    'rejection_reason',];
 
     protected $casts = [
         'title' => 'array',
@@ -73,5 +74,10 @@ use HasUlids, HasFactory,HasTranslations;
     public function bookings(): HasMany
     {
         return $this->hasMany(Booking::class);
+    }
+
+    public function favoritedBy(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'favorites', 'listing_id', 'user_id');
     }
 }

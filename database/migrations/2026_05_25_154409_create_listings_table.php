@@ -19,7 +19,7 @@ return new class extends Migration
             $table->json('title');
             $table->json('description');
             
-            $table->enum('listing_type', ['physical_product', 'service', 'package']);
+            $table->enum('listing_type', ['physical_product', 'service', 'package', 'hall']);
             $table->string('material_composition')->nullable(); // Used if physical product
             $table->string('secondary_contact_number')->nullable();
             
