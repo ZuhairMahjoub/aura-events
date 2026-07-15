@@ -50,6 +50,10 @@ return [
    'firebase' => [
         'credentials' => env('FIREBASE_CREDENTIALS'),
     ],
+    'shamcash' => [
+    'url' => env('SHAMCASH_API_URL'),
+    'token' => env('SHAMCASH_TOKEN'),
+],
 
 
     

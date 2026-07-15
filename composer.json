@@ -15,6 +15,7 @@
         "laravel/socialite": "^5.27",
         "laravel/tinker": "^2.10.1",
         "predis/predis": "^3.5",
+        "smalot/pdfparser": "^2.12",
         "spatie/laravel-permission": "^6.25",
         "spatie/laravel-translatable": "^6.14"
     },
