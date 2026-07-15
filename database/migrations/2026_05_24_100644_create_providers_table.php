@@ -19,6 +19,7 @@ return new class extends Migration
             $table->decimal('rating', 3, 2)->default(0.00);
             $table->boolean('is_verified')->default(false);
             $table->boolean('is_active')->default(true);
+            $table->string('qr_code_path')->nullable();
             $table->timestamps();
         });
     }

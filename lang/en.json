@@ -1,0 +1,24 @@
+{
+    "logout_success": "Successfully logged out.",
+    "account_not_verified": "Sorry, you must verify the account first via the link sent to your email or OTP code.",
+    
+    "notification_login_title": "New Login Detected 🔒",
+    "notification_login_body": "Your account was just accessed. If this wasn't you, please secure your account.",
+    "notification_welcome_title": "Welcome to Aura Events! 🎉",
+    "notification_welcome_body": "Your account has been created successfully. Welcome aboard!",
+    "notification_google_login_title": "Google Login Detected 🔑",
+    "notification_google_login_body": "You have successfully logged in using your Google account.",
+    
+    "notif_booking_new_title": "New Booking Request! 📅",
+    "notif_booking_new_body": "You have a new booking request from :name",
+    "notif_booking_cancelled_title": "Booking Cancelled",
+    "notif_booking_cancelled_body": "Booking #:id has been cancelled successfully.",
+    "notif_booking_accepted_title": "Your Booking Accepted! 🎉",
+    "notif_booking_accepted_body": "The service provider has accepted your booking request.",
+    "notif_booking_completed_title": "Booking Completed ✅",
+    "notif_booking_completed_body": "Booking completed successfully. Thank you!",
+    "notif_booking_rejected_title": "Booking Update",
+    "notif_booking_rejected_body": "Sorry, your booking request was rejected. Reason: :reason"
+
+
+}

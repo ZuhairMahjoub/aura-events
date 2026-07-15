@@ -13,8 +13,7 @@ return new class extends Migration
 {
     Schema::create('categories', function (Blueprint $table) {
         $table->id();
-        $table->string('name_ar'); // اسم القسم بالعربية
-        $table->string('name_en'); // اسم القسم بالإنجليزية
+        $table->json('name');
         $table->timestamps();
     });
 }

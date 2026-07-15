@@ -5,16 +5,23 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\Translatable\HasTranslations;
 
 class District extends Model
 {
+    use HasTranslations;
+    
+    public $translatable=['name'];
+
     protected $fillable = [
         'governorate_id',
-        'name_ar',
-        'name_en'
+       'name'
     ];
-
-   
+    // protected $casts = [
+    //     'name' => 'array',
+      
+    // ];
+    
     public function governorate(): BelongsTo
     {
         return $this->belongsTo(Governorate::class);
@@ -27,4 +34,5 @@ class District extends Model
     public function Listing(){
         return $this->hasMany(Listing::class);
     }
+    
 }

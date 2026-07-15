@@ -17,6 +17,7 @@ class ListingController extends Controller
 {
     protected ListingService $listingService;
 
+
     public function __construct(ListingService $listingService)
     {
         $this->listingService = $listingService;
@@ -69,7 +70,7 @@ public function getCompanyInventory(Request $request): JsonResponse
   
    public function index(): JsonResponse
 {
-    Gate::authorize('viewAny', Listing::class);
+    // Gate::authorize('viewAny', Listing::class);
 
     $listings = $this->listingService->getAllListings();
 
@@ -128,6 +129,8 @@ public function destroy(Listing $listing): JsonResponse
 
     try {
         $this->listingService->deleteListing($listing);
+
+
         
         return response()->json([
             'success' => true,
