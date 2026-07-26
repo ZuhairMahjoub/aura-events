@@ -22,8 +22,9 @@ class JobOfferService
      */
     public function getJobOfferById($id)
     {
-        // Adjust model name or eager loading (e.g., with('company')) if needed
-        return JobOffer::find($id); 
+        return JobOffer::with(['provider', 'service'])
+            ->withCount('applications')
+            ->find($id);
     }
   public function getFreelancerAppliedJobs(string $freelancerId)
     {
@@ -42,8 +43,9 @@ class JobOfferService
     {
         return CompanyFreelancerContract::where('company_id', $companyId)
             ->with([
-                'freelancer.user:id,first_name,last_name,email', 
-                'jobOffer:id,job_title'
+                'freelancer.user:id,first_name,last_name,email',
+                'jobOffer:id,job_title,service_id',
+                'jobOffer.service:id,name,description'
             ])
             ->orderBy('created_at', 'desc')
             ->get();

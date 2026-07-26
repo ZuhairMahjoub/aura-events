@@ -25,7 +25,11 @@ class CreateArrangementAction
             $this->validateItems->execute($data['items'], $providerId);
         }
         if (! empty($data['freelancers'])) {
-            $this->validateFreelancers->execute($data['freelancers'], $providerId);
+            $this->validateFreelancers->execute(
+                $data['freelancers'],
+                $providerId,
+                $this->extractArrangementDates($data)
+            );
         }
 
         return DB::transaction(function () use ($data, $providerId) {
@@ -83,6 +87,58 @@ class CreateArrangementAction
                 'district',
             ]);
         });
+    }
+
+    /**
+     * الخطوة 7: استخراج قائمة تواريخ التنسيق المسطّحة (Y-m-d) من إما
+     * availabilities الصريحة أو date_range، حتى نفحص تعارضها مع روزنامة
+     * الفريلانسر قبل أي حفظ فعلي.
+     */
+    private function extractArrangementDates(array $data): array
+    {
+        if (! empty($data['availabilities'])) {
+            return collect($data['availabilities'])
+                ->flatMap(function ($availability) {
+                    $date = \Illuminate\Support\Carbon::parse($availability['available_date'])->format('Y-m-d');
+                    $slots = $availability['slots'] ?? [];
+
+                    if (empty($slots)) {
+                        return [['date' => $date, 'start_time' => null, 'end_time' => null]];
+                    }
+
+                    return collect($slots)->map(fn ($slot) => [
+                        'date' => $date,
+                        'start_time' => $slot['start_time'] ?? null,
+                        'end_time' => $slot['end_time'] ?? null,
+                    ]);
+                })
+                ->unique(fn ($w) => "{$w['date']}|{$w['start_time']}|{$w['end_time']}")
+                ->values()
+                ->toArray();
+        }
+
+        if (! empty($data['date_range'])) {
+            return collect($this->syncAvailabilities->buildAvailabilitiesFromRange($data['date_range']))
+                ->flatMap(function ($availability) {
+                    $date = $availability['available_date'];
+                    $slots = $availability['slots'] ?? [];
+
+                    if (empty($slots)) {
+                        return [['date' => $date, 'start_time' => null, 'end_time' => null]];
+                    }
+
+                    return collect($slots)->map(fn ($slot) => [
+                        'date' => $date,
+                        'start_time' => $slot['start_time'] ?? null,
+                        'end_time' => $slot['end_time'] ?? null,
+                    ]);
+                })
+                ->unique(fn ($w) => "{$w['date']}|{$w['start_time']}|{$w['end_time']}")
+                ->values()
+                ->toArray();
+        }
+
+        return [];
     }
 
     private function attachImages(array $tempPaths, Listing $listing): void

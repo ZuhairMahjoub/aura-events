@@ -7,6 +7,7 @@ use App\DTOs\BookingData;
 use App\Events\BookingAccepted;
 use App\Models\Booking;
 use App\Models\BookingStatusLog;
+use App\Models\FreelancerBlockedDate;
 use App\Models\Listing;
 use App\Services\Booking\BookingStrategyFactory;
 use Illuminate\Support\Facades\DB;
@@ -100,6 +101,7 @@ class BookingService
 
             $this->assertCanBeCancelled($booking, $cancelledBy);
             $this->releaseCapacity($booking);
+            $this->releaseFreelancerDateIfApplicable($booking);
 
             $booking->update([
                 'status'               => 'cancelled',
@@ -132,6 +134,7 @@ class BookingService
 
             $previousStatus = $booking->status;
             $this->releaseCapacity($booking);
+            $this->releaseFreelancerDateIfApplicable($booking);
 
             $booking->update([
                 'status'              => 'rejected',
@@ -205,10 +208,12 @@ class BookingService
 
             $previousStatus = $booking->status;
 
-            $booking->update([
+           $booking->update([
                 'status'       => 'completed',
                 'completed_at' => now(),
             ]);
+
+            $this->releaseFreelancerDateIfApplicable($booking);
 
             $this->logTransition($booking, $previousStatus, 'completed', $actorType, $actorId);
 
@@ -237,10 +242,62 @@ class BookingService
 
             $this->logTransition($booking, $previousStatus, 'accepted', 'provider', null);
 
+            $this->blockFreelancerDateIfApplicable($booking);
+
             DB::afterCommit(fn() => event(new BookingAccepted($booking)));
 
             return $booking->fresh();
         });
+    }
+
+    /**
+     * الخطوة 6: عند قبول حجز لفريلانسر، نحجز تاريخه تلقائياً بروزنامته
+     * (source = booking) حتى ينمنع تعارضه بأي تنسيق آخر بنفس اليوم.
+     */
+    private function blockFreelancerDateIfApplicable(Booking $booking): void
+    {
+        if ($booking->provider?->provider_type !== 'freelancer') {
+            return;
+        }
+
+        // ⚠️ إصلاح جوهري: قبل كنا نحجز اليوم كامل بغض النظر عن وقت الحجز
+        // الفعلي، فحجزين بنفس اليوم بأوقات مختلفة تماماً (مثلاً 2:00 ظهراً
+        // و 7:00 مساءً) كانا يتصادمان بدون أي داعي حقيقي. هلق منستخدم
+        // بالضبط وقت الحجز (booked_start_time/booked_end_time، الجايين من
+        // الـ slot الفعلي) — ولو ما كان في وقت محدد (نادراً)، منرجع لحجز
+        // اليوم بالكامل كـ fallback آمن.
+        $startTime = $booking->booked_start_time;
+        $endTime   = $booking->booked_end_time;
+
+        // ⚠️ إصلاح الثغرة المكتشفة: كنا نستخدم updateOrCreate على
+        // (freelancer_id, blocked_date) فقط، فحجز ثانٍ بنفس اليوم كان
+        // يستبدل booking_id للحجز الأول بصمت بدل ما يُرفض — يعني الفريلانسر
+        // كان فعلياً يُقبل له حجزان متعارضان بنفس الوقت. هلق نتحقق فعلياً
+        // من عدم وجود تعارض زمني حقيقي قبل أي إنشاء، ونرمي استثناء واضح
+        // لو في تصادم، بدل الاستبدال الصامت.
+        if (FreelancerBlockedDate::hasConflict($booking->provider_id, $booking->booked_date, $startTime, $endTime)) {
+            throw new \DomainException(
+                'هذا الفريلانسر لديه حجز أو حظر متعارض بنفس التاريخ والوقت بالفعل.'
+            );
+        }
+
+        FreelancerBlockedDate::create([
+            'freelancer_id' => $booking->provider_id,
+            'blocked_date'  => $booking->booked_date,
+            'start_time'    => $startTime,
+            'end_time'      => $endTime,
+            'source'        => 'booking',
+            'booking_id'    => $booking->id,
+        ]);
+    }
+
+    /**
+     * الخطوة 6: عند رفض/إلغاء حجز فريلانسر، نحرر تاريخه من الروزنامة
+     * (فقط التواريخ التي حجزها هذا الحجز تحديداً عبر booking_id).
+     */
+    private function releaseFreelancerDateIfApplicable(Booking $booking): void
+    {
+        FreelancerBlockedDate::where('booking_id', $booking->id)->delete();
     }
 
     /**

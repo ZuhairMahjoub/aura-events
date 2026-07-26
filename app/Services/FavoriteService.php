@@ -39,7 +39,7 @@ class FavoriteService
             )
             
             // 3. Eager load relations
-            ->with(['images', 'variants', 'category', 'district'])
+            ->with(['images', 'variants','avilableties','slots', 'category', 'district'])
             ->paginate($perPage);
     }
 }

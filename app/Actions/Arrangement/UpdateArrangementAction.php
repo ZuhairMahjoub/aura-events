@@ -28,8 +28,30 @@ class UpdateArrangementAction
         if (isset($data['items'])) {
             $this->validateItems->execute($data['items'], $providerId);
         }
-        if (isset($data['freelancers'])) {
-            $this->validateFreelancers->execute($data['freelancers'], $providerId);
+
+        // الخطوة 8: إعادة فحص تعارض التواريخ عند التحديث.
+        // يجب الفحص في حالتين: 
+        // 1) إذا تم إرسال قائمة فريلانسرز جديدة.
+        // 2) أو إذا تم تغيير تواريخ التنسيق (availabilities/date_range) وكان هناك فريلانسرز مربوطون مسبقاً.
+      $freelancersSent = array_key_exists('freelancers', $data);
+        $freelancers = $data['freelancers'] ?? null;
+        $newDates = $this->extractArrangementDates($data);
+
+        // إذا لم يتم إرسال freelancers إطلاقاً، نتحقق من الفريلانسرز الحاليين المرتبطين بالتنسيق
+        if (!$freelancersSent && !empty($newDates)) {
+            $variant = $listing->variants()->first();
+            if ($variant) {
+                $freelancers = $variant->packageFreelancers->map(fn($pf) => [
+                    'freelancer_id' => $pf->freelancer_id,
+                    'contract_id'   => $pf->contract_id,
+                ])->toArray();
+            }
+        }
+      
+        if (!empty($freelancers)) {
+            // نمرر التواريخ (سواء الجديدة أو الحالية إذا لم تتغير) للفحص
+            $checkDates = !empty($newDates) ? $newDates : $this->getCurrentArrangementDates($listing);
+            $this->validateFreelancers->execute($freelancers, $providerId, $checkDates);
         }
 
         return DB::transaction(function () use ($listing, $data, $providerId) {
@@ -118,5 +140,84 @@ class UpdateArrangementAction
                 'images', 'category', 'district',
             ]);
         });
+    }
+
+    /**
+     * استخراج قائمة تواريخ التنسيق المسطّحة (Y-m-d) من البيانات المدخلة.
+     */
+    private function extractArrangementDates(array $data): array
+    {
+        if (!empty($data['availabilities'])) {
+            return collect($data['availabilities'])
+                ->flatMap(function ($availability) {
+                    $date = \Illuminate\Support\Carbon::parse($availability['available_date'])->format('Y-m-d');
+                    $slots = $availability['slots'] ?? [];
+
+                    if (empty($slots)) {
+                        return [['date' => $date, 'start_time' => null, 'end_time' => null]];
+                    }
+
+                    return collect($slots)->map(fn ($slot) => [
+                        'date' => $date,
+                        'start_time' => $slot['start_time'] ?? null,
+                        'end_time' => $slot['end_time'] ?? null,
+                    ]);
+                })
+                ->unique(fn ($w) => "{$w['date']}|{$w['start_time']}|{$w['end_time']}")
+                ->values()
+                ->toArray();
+        }
+
+        if (!empty($data['date_range'])) {
+            return collect($this->syncAvailabilities->buildAvailabilitiesFromRange($data['date_range']))
+                ->flatMap(function ($availability) {
+                    $date = $availability['available_date'];
+                    $slots = $availability['slots'] ?? [];
+
+                    if (empty($slots)) {
+                        return [['date' => $date, 'start_time' => null, 'end_time' => null]];
+                    }
+
+                    return collect($slots)->map(fn ($slot) => [
+                        'date' => $date,
+                        'start_time' => $slot['start_time'] ?? null,
+                        'end_time' => $slot['end_time'] ?? null,
+                    ]);
+                })
+                ->unique(fn ($w) => "{$w['date']}|{$w['start_time']}|{$w['end_time']}")
+                ->values()
+                ->toArray();
+        }
+
+        return [];
+    }
+
+    /**
+     * جلب النوافذ الزمنية الحالية المسجلة فعلياً للتنسيق بقاعدة البيانات
+     * (تاريخ + وقت كل slot موجود).
+     */
+    private function getCurrentArrangementDates(Listing $listing): array
+    {
+        $variant = $listing->variants()->first();
+        if (!$variant) return [];
+
+        return $variant->availabilities()
+            ->with('slots')
+            ->get()
+            ->flatMap(function ($availability) {
+                $date = $availability->available_date->format('Y-m-d');
+
+                if ($availability->slots->isEmpty()) {
+                    return [['date' => $date, 'start_time' => null, 'end_time' => null]];
+                }
+
+                return $availability->slots->map(fn ($slot) => [
+                    'date' => $date,
+                    'start_time' => $slot->start_time,
+                    'end_time' => $slot->end_time,
+                ]);
+            })
+            ->values()
+            ->toArray();
     }
 }

@@ -24,7 +24,9 @@ class AdminProviderController extends Controller
     public function approve($id)
     {
         $provider = Provider::findOrFail($id);
-
+        if ($provider->moderation_status === 'approved') {
+            return response()->json(['status' => 'error', 'message' => 'هذا المزود معتمد بالفعل.'], 422);
+        }
         $provider->update([
             'moderation_status' => 'approved',
             'is_active' => true
@@ -59,31 +61,31 @@ class AdminProviderController extends Controller
     }
 
     public function showProvider(string $id): JsonResponse
-{
-    $provider = Provider::with([
-        'user',
-        'categories',
-        'freelancerDetails',
-        'companyDetails.district',
-    ])->findOrFail($id);
-
-    return response()->json([
-        'status' => 'success',
-        'data'   => new ProviderResource($provider),
-    ]);
-}
-
-  public function getUserDetails(string $id): JsonResponse
-{
-    try {
-        $user = User::findOrFail($id);
+    {
+        $provider = Provider::with([
+            'user',
+            'categories',
+            'freelancerDetails',
+            'companyDetails.district',
+        ])->findOrFail($id);
 
         return response()->json([
             'status' => 'success',
-            'data'   => new UserResource($user)
+            'data'   => new ProviderResource($provider),
         ]);
-    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-        return response()->json(['message' => 'المستخدم غير موجود'], 404);
     }
-}
+
+    public function getUserDetails(string $id): JsonResponse
+    {
+        try {
+            $user = User::findOrFail($id);
+
+            return response()->json([
+                'status' => 'success',
+                'data'   => new UserResource($user)
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['message' => 'المستخدم غير موجود'], 404);
+        }
+    }
 }

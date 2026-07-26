@@ -81,6 +81,7 @@ class ArrangementController extends Controller
                 'category',
                 'district',
                 'variants.packageItems.includedVariant.images',
+                'variants.packageFreelancers.contract.jobOffer.service',
                 'variants.packageItems.includedVariant.listing',
                 'variants.packageFreelancers.freelancer',
                 'variants.availabilities.slots'

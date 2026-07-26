@@ -154,6 +154,7 @@ public function destroy(Listing $listing): JsonResponse
 {
     $listing = Listing::with([
         'images',
+        'provider',
         'category',
         'district',
         'variants.images',
@@ -161,6 +162,7 @@ public function destroy(Listing $listing): JsonResponse
         'variants.packageItems.includedVariant.listing',
         'variants.packageFreelancers.freelancer',
     ])->findOrFail($id);
+    Gate::authorize('view', $listing);
 
     return response()->json([
         'success' => true,
