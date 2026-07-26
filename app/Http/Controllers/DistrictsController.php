@@ -7,15 +7,24 @@ use Illuminate\Http\JsonResponse;
 
 class DistrictsController extends Controller
 {
-    
-    public function index(): JsonResponse
-    {
-        $districts = District::select('id', 'name_ar', 'name_en')->get();
+    // في DistrictsController.php
+public function index(): JsonResponse
+{
+    $districts = District::all();
 
-        return response()->json([
-            'status'  => true,
-            'message' => 'Districts retrieved successfully.',
-            'data'    => $districts
-        ], 200);
-    }
+    // هنا نحن نطلب 'name' فقط، والمكتبة ستقوم بجلب القيمة 
+    // بناءً على اللغة التي حددها الـ middleware تلقائياً
+    $data = $districts->map(function ($district) {
+        return [
+            'id'   => $district->id,
+            'name' => $district->name, // ستتغير تلقائياً بناءً على الـ Accept-Language
+        ];
+    });
+
+    return response()->json([
+        'status'  => true,
+        'message' => 'Districts retrieved successfully.',
+        'data'    => $data
+    ], 200);
+}
 }

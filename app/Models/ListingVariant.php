@@ -9,14 +9,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\Translatable\HasTranslations;
 
 class ListingVariant extends Model
 {
-    use HasUlids, SoftDeletes, HasFactory;
+    use HasUlids, SoftDeletes, HasFactory,HasTranslations;
 
-    protected $keyType    = 'string';
-    public    $incrementing = false;
-
+        protected $keyType    = 'string';
+       public    $incrementing = false;
+       public $translatable = ['variant_name'];
     protected $fillable = [
         'listing_id',
         'variant_name',

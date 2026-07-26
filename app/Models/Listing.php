@@ -10,10 +10,12 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
+use Spatie\Translatable\HasTranslations;
 
 class Listing extends Model
 {
-use HasUlids, HasFactory;
+use HasUlids, HasFactory,HasTranslations;
+ public $translatable = ['title', 'description'];
     protected $keyType = 'string';
     public $incrementing = false;
 

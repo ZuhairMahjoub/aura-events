@@ -11,11 +11,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->prepend(\App\Http\Middleware\SetLocale::class);
         $middleware->api(prepend: [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
 
         $middleware->alias([
+            'set_locale' => \App\Http\Middleware\SetLocale::class,
             'verified' => \App\Http\Middleware\EnsureEmailIsVerified::class,
                 'account_verified' => \App\Http\Middleware\EnsureAccountIsVerified::class,  
 'role'               => \Spatie\Permission\Middleware\RoleMiddleware::class,
