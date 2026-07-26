@@ -8,12 +8,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Provider extends Model
 {
-    use HasUlids , HasFactory;
+    use HasUlids, HasFactory;
 
     protected $fillable = [
         'user_id',
@@ -21,36 +22,42 @@ class Provider extends Model
         'provider_type',
         'rating',
         'is_verified',
-        'district_id',        
-        'address_details',    
+        'district_id',
+        'address_details',
         'is_active',
-        'moderation_status',        
+        'moderation_status',
         'rejection_reason'
     ];
-// في app/Models/Provider.php
-public function activeContracts()
-{
-    return $this->hasMany(CompanyFreelancerContract::class, 'freelancer_id')
-                ->where('status', 'active');
-}
+    // في app/Models/Provider.php
+    public function activeContracts()
+    {
+        return $this->hasMany(CompanyFreelancerContract::class, 'freelancer_id')
+            ->where('status', 'active');
+    }
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
     public function categories()
-{
-    return $this->belongsToMany(Category::class, 'category_provider');
-}
+    {
+        return $this->belongsToMany(Category::class, 'category_provider');
+    }
+
+    // الخدمات التي عرّفتها الشركة (Company فقط عملياً، ذات معنى لـ freelancer)
+    public function services(): HasMany
+    {
+        return $this->hasMany(Service::class, 'company_id');
+    }
 
     public function companyDetails(): HasOne
     {
         return $this->hasOne(CompanyDetail::class);
     }
-public function getProfileAttribute()
-{
-    return $this->companyDetails ?? $this->freelancerDetails;
-}
+    public function getProfileAttribute()
+    {
+        return $this->companyDetails ?? $this->freelancerDetails;
+    }
     public function freelancerDetails(): HasOne
     {
         return $this->hasOne(FreelancerDetail::class);
@@ -65,13 +72,13 @@ public function getProfileAttribute()
         return $this->hasMany(Booking::class);
     }
     // في كلا الموديلين
-public function reviewsReceived()
-{
-    return $this->morphMany(Review::class, 'reviewee');
-}
+    public function reviewsReceived()
+    {
+        return $this->morphMany(Review::class, 'reviewee');
+    }
 
-public function reviewsGiven()
-{
-    return $this->morphMany(Review::class, 'reviewer');
-}
+    public function reviewsGiven()
+    {
+        return $this->morphMany(Review::class, 'reviewer');
+    }
 }

@@ -14,18 +14,20 @@ class FreelancerBlockedDateController extends Controller
      * GET /freelancer/blocked-dates
      * يرجع كل تواريخ الفريلانسر الحالي (يدوي + تلقائي)
      */
-    public function index(Request $request)
-    {
-        Gate::authorize('viewAny', FreelancerBlockedDate::class);
+   public function index(Request $request)
+{
+    Gate::authorize('viewAny', FreelancerBlockedDate::class);
 
-        $freelancer = $request->user()->providerProfile;
+    $freelancer = $request->user()->providerProfile;
 
-        $dates = FreelancerBlockedDate::where('freelancer_id', $freelancer->id)
-            ->orderBy('blocked_date')
-            ->get();
+    $dates = FreelancerBlockedDate::where('freelancer_id', $freelancer->id)
+        ->when($request->filled('source'), fn ($q) => $q->where('source', $request->input('source')))
+        ->with('booking:id,status,booking_type,total_price') // تفاصيل الحجز نفسه
+        ->orderBy('blocked_date')
+        ->get();
 
-        return response()->json($dates);
-    }
+    return response()->json($dates);
+}
 
     /**
      * POST /freelancer/blocked-dates

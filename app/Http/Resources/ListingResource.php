@@ -31,10 +31,15 @@ class ListingResource extends JsonResource
                 ? ['id' => $this->district->id, 'name' => $this->district->name_en]
                 : null,
 
-            'company' => $this->relationLoaded('provider') && $this->provider
+            'provider' => $this->relationLoaded('provider') && $this->provider
                 ? [
-                    'id'   => $this->provider->id,
-                    'name' => trim($this->provider->user->first_name . ' ' . $this->provider->user->last_name),
+                    'id'            => $this->provider->id,
+                    'type'          => $this->provider->provider_type, // 'company' أو 'freelancer'
+                    'name'          => $this->provider->provider_type === 'company'
+                        ? ($this->provider->brand_name ?? trim($this->provider->user->first_name . ' ' . $this->provider->user->last_name))
+                        : trim($this->provider->user->first_name . ' ' . $this->provider->user->last_name),
+                    'email'         => $this->provider->user->email,
+                    'is_verified'   => (bool) $this->provider->is_verified,
                 ]
                 : null,
 
@@ -80,6 +85,35 @@ class ListingResource extends JsonResource
                                     'remaining_capacity' => (int) $slot->remaining_capacity,
                                 ])
                                 : [],
+                        ])
+                        : [],
+
+                    'package_items' => $variant->relationLoaded('packageItems')
+                        ? $variant->packageItems->map(fn($item) => [
+                            'id'               => $item->id,
+                            'quantity'         => $item->quantity ?? null,
+                            'included_variant' => $item->relationLoaded('includedVariant') && $item->includedVariant
+                                ? [
+                                    'id'      => $item->includedVariant->id,
+                                    'name'    => $item->includedVariant->variant_name,
+                                    'listing' => $item->includedVariant->relationLoaded('listing') && $item->includedVariant->listing
+                                        ? ['id' => $item->includedVariant->listing->id, 'title' => $item->includedVariant->listing->title]
+                                        : null,
+                                ]
+                                : null,
+                        ])
+                        : [],
+
+                    'package_freelancers' => $variant->relationLoaded('packageFreelancers')
+                        ? $variant->packageFreelancers->map(fn($pf) => [
+                            'id'         => $pf->id,
+                            'freelancer' => $pf->relationLoaded('freelancer') && $pf->freelancer
+                                ? [
+                                    'id'    => $pf->freelancer->id,
+                                    'name'  => trim($pf->freelancer->user->first_name . ' ' . $pf->freelancer->user->last_name),
+                                    'email' => $pf->freelancer->user->email,
+                                ]
+                                : null,
                         ])
                         : [],
                 ])

@@ -16,7 +16,15 @@ class ValidatePackageFreelancersAction
      * @throws Exception (403)
      * @throws ValidationException (422)
      */
-    public function execute(array $freelancers, string $companyId, array $arrangementDates = []): void
+    /**
+     * @param  array  $arrangementWindows  نوافذ زمنية للتنسيق، كل عنصر:
+     *                                     ['date' => 'Y-m-d', 'start_time' => ?string, 'end_time' => ?string]
+     *                                     start_time/end_time = null يعني "اليوم كامل" (لا يوجد slot محدد).
+     *
+     * @throws Exception (403)
+     * @throws ValidationException (422)
+     */
+    public function execute(array $freelancers, string $companyId, array $arrangementWindows = []): void
     {
         $freelancerIds = collect($freelancers)->pluck('freelancer_id')->unique()->toArray();
         $contractIds   = collect($freelancers)->pluck('contract_id')->unique()->toArray();
@@ -48,28 +56,40 @@ class ValidatePackageFreelancersAction
             }
         }
 
-        // الخطوة 7: فحص تعارض التواريخ فوراً — قبل ما نكمل أي حفظ فعلي.
-        if (! empty($arrangementDates)) {
-            $this->assertNoDateConflicts($freelancerIds, $arrangementDates);
+        // الخطوة 7: فحص تعارض التواريخ/الأوقات فوراً — قبل ما نكمل أي حفظ فعلي.
+        if (! empty($arrangementWindows)) {
+            $this->assertNoDateConflicts($freelancerIds, $arrangementWindows);
         }
     }
 
     /**
+     * ⚠️ تحديث: فحص تعارض حقيقي بمستوى الوقت (مش اليوم كامل بس)، بنفس
+     * منطق FreelancerBlockedDate::hasConflict() المستخدم بجهة الحجوزات —
+     * عشان ما يصير نفس نوع المشكلة يلي انصلحت هناك (رفض تنسيق الساعة 9
+     * صباحاً بسبب حجز مباشر الساعة 2 ظهراً بنفس اليوم، رغم عدم أي تداخل فعلي).
+     *
      * @throws ValidationException (422)
      */
-    private function assertNoDateConflicts(array $freelancerIds, array $arrangementDates): void
+    private function assertNoDateConflicts(array $freelancerIds, array $arrangementWindows): void
     {
         foreach ($freelancerIds as $freelancerId) {
-            $conflictDates = FreelancerBlockedDate::where('freelancer_id', $freelancerId)
-                ->whereIn('blocked_date', $arrangementDates)
-                ->pluck('blocked_date');
+            foreach ($arrangementWindows as $window) {
+                $hasConflict = FreelancerBlockedDate::hasConflict(
+                    $freelancerId,
+                    $window['date'],
+                    $window['start_time'] ?? null,
+                    $window['end_time'] ?? null,
+                );
 
-            if ($conflictDates->isNotEmpty()) {
-                $formatted = $conflictDates->map(fn ($d) => $d->format('Y-m-d'))->implode(', ');
+                if ($hasConflict) {
+                    $label = $window['start_time']
+                        ? "{$window['date']} ({$window['start_time']}-{$window['end_time']})"
+                        : $window['date'];
 
-                throw ValidationException::withMessages([
-                    'freelancers' => "الفريلانسر غير متاح بتاريخ: {$formatted}",
-                ]);
+                    throw ValidationException::withMessages([
+                        'freelancers' => "الفريلانسر غير متاح بتاريخ: {$label}",
+                    ]);
+                }
             }
         }
     }

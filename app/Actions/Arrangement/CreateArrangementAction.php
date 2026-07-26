@@ -98,17 +98,42 @@ class CreateArrangementAction
     {
         if (! empty($data['availabilities'])) {
             return collect($data['availabilities'])
-                ->pluck('available_date')
-                ->map(fn ($d) => \Illuminate\Support\Carbon::parse($d)->format('Y-m-d'))
-                ->unique()
+                ->flatMap(function ($availability) {
+                    $date = \Illuminate\Support\Carbon::parse($availability['available_date'])->format('Y-m-d');
+                    $slots = $availability['slots'] ?? [];
+
+                    if (empty($slots)) {
+                        return [['date' => $date, 'start_time' => null, 'end_time' => null]];
+                    }
+
+                    return collect($slots)->map(fn ($slot) => [
+                        'date' => $date,
+                        'start_time' => $slot['start_time'] ?? null,
+                        'end_time' => $slot['end_time'] ?? null,
+                    ]);
+                })
+                ->unique(fn ($w) => "{$w['date']}|{$w['start_time']}|{$w['end_time']}")
                 ->values()
                 ->toArray();
         }
 
         if (! empty($data['date_range'])) {
             return collect($this->syncAvailabilities->buildAvailabilitiesFromRange($data['date_range']))
-                ->pluck('available_date')
-                ->unique()
+                ->flatMap(function ($availability) {
+                    $date = $availability['available_date'];
+                    $slots = $availability['slots'] ?? [];
+
+                    if (empty($slots)) {
+                        return [['date' => $date, 'start_time' => null, 'end_time' => null]];
+                    }
+
+                    return collect($slots)->map(fn ($slot) => [
+                        'date' => $date,
+                        'start_time' => $slot['start_time'] ?? null,
+                        'end_time' => $slot['end_time'] ?? null,
+                    ]);
+                })
+                ->unique(fn ($w) => "{$w['date']}|{$w['start_time']}|{$w['end_time']}")
                 ->values()
                 ->toArray();
         }

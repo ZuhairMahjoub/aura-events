@@ -3,9 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Services\JobOfferService;
+use App\Http\Requests\StoreJobOfferRequest;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Validation\Rule;
 
 /**
  * إصلاحات مطبقة على هذا الملف:
@@ -32,32 +32,10 @@ class JobOfferController extends Controller
      * ملاحظة: التحقق من أن الحساب "شركة" أصبح مسؤولية middleware
      * provider_type:company على مستوى الـ route، فلا حاجة لتكراره هنا.
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreJobOfferRequest $request): JsonResponse
     {
         $company = $request->user()->providerProfile;
-
-        $validated = $request->validate([
-            'service_id' => [
-                'required', 'string',
-                Rule::exists('services', 'id')->where('company_id', $company->id),
-            ],
-            'job_title' => ['required', 'string', 'max:255'],
-            'time_condition' => ['required', 'in:Permanent,Temporary,Contract'],
-            'event_type' => ['required', 'string'],
-            'job_start_date' => ['required', 'date', 'after_or_equal:today'],
-            // إصلاح: كان يُتحقق من application_deadline مقابل "اليوم" فقط，
-            // دون أي علاقة بـ job_start_date. هذا كان يسمح بنشر وظيفة يكون
-            // فيها الموعد النهائي للتقديم بعد تاريخ بدء العمل الفعلي —
-            // منطقياً غير سليم رغم كونه مقبولاً تقنياً سابقاً.
-            'application_deadline' => ['required', 'date', 'after_or_equal:today', 'before_or_equal:job_start_date'],
-            'salary' => ['required', 'numeric', 'min:0'],
-            'payment_system' => ['required', 'in:Per Event,Monthly,Hourly'],
-            'specific_event_association' => ['nullable', 'string'],
-            'experience_level' => ['required', 'in:Junior,Mid,Senior'],
-            'company_equipment_provided' => ['required', 'boolean'],
-            'job_requirements_and_scope' => ['required', 'string'],
-            'contact_info' => ['required', 'string'],
-        ]);
+        $validated = $request->validated();
 
         $jobOffer = $this->jobOfferService->createJobOffer($validated, $company->id);
 

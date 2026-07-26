@@ -3,63 +3,59 @@
 namespace App\Http\Controllers;
 
 use App\Models\FreelancerDetail;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class FreelancerDetailController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * GET /freelancer/details
+     * عرض البيانات التفصيلية للفريلانسر الحالي (رقم الهوية، سنوات الخبرة).
      */
-    public function index()
+    public function show(Request $request): JsonResponse
     {
-        //
+        $freelancer = $request->user()->providerProfile;
+
+        if ($freelancer->provider_type !== 'freelancer') {
+            return response()->json(['success' => false, 'message' => 'هذا الحساب ليس فريلانسر.'], 403);
+        }
+
+        $details = $freelancer->freelancerDetails;
+
+        return response()->json([
+            'success' => true,
+            'data' => $details,
+        ]);
     }
 
     /**
-     * Show the form for creating a new resource.
+     * PUT /freelancer/details
+     * تحديث/إنشاء البيانات التفصيلية للفريلانسر الحالي.
+     * نستخدم updateOrCreate لأن الفريلانسر قد لا يملك سجل FreelancerDetail
+     * بعد إذا لم يكمل هذه الخطوة وقت التسجيل.
      */
-    public function create()
+    public function update(Request $request): JsonResponse
     {
-        //
-    }
+        $freelancer = $request->user()->providerProfile;
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
-    {
-        //
-    }
+        if ($freelancer->provider_type !== 'freelancer') {
+            return response()->json(['success' => false, 'message' => 'هذا الحساب ليس فريلانسر.'], 403);
+        }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(FreelancerDetail $freelancerDetail)
-    {
-        //
-    }
+        $validated = $request->validate([
+            'national_id' => ['required', 'string', 'max:50'],
+            'experience_years' => ['required', 'integer', 'min:0', 'max:60'],
+        ]);
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(FreelancerDetail $freelancerDetail)
-    {
-        //
-    }
+        $details = FreelancerDetail::updateOrCreate(
+            ['provider_id' => $freelancer->id],
+            $validated
+        );
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, FreelancerDetail $freelancerDetail)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(FreelancerDetail $freelancerDetail)
-    {
-        //
+        return response()->json([
+            'success' => true,
+            'message' => 'تم تحديث بياناتك بنجاح.',
+            'data' => $details,
+        ]);
     }
 }
