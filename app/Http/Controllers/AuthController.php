@@ -295,8 +295,8 @@ class AuthController extends Controller
             [
                 'action' => 'security_alert',
                 'time'   => now()->toDateTimeString()
-            ]
-            $user->id, 
+            ],
+            $user->id,
            __('notification_login_title'), 
             __('notification_login_body'), 
          [

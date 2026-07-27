@@ -179,7 +179,7 @@ class BookingController extends Controller
             'data'    => $booking,
         ]);
     }
- public function reject(string $bookingId): JsonResponse
+ public function reject(string $bookingId)
 {
     // إصلاح حرج: كان هذا الميثود يكرر منطق BookingService::reject() بشكل
     // خاطئ ومستقل تماماً عنه، ما تسبب في:
@@ -202,31 +202,32 @@ class BookingController extends Controller
         $bookingId,
         $providerId,
         request()->input('reason')
-    );
-=======
-    public function reject(string $bookingId, string $providerId, ?string $reason): Booking
-    {
-        return DB::transaction(function () use ($bookingId, $providerId, $reason) {
-            $booking = Booking::findOrFail($bookingId);   //  بدون lockForUpdate
+    );}
 
-            Gate::authorize('reject', $booking); // تأكد من إضافة دالة reject في الـ BookingPolicy
+//     public function reject(string $bookingId, string $providerId, ?string $reason)
+//     {
+//         return DB::transaction(function () use ($bookingId, $providerId, $reason) {
+//             $booking = Booking::findOrFail($bookingId);   //  بدون lockForUpdate
 
-            $booking->update([
-                'status' => 'rejected',
-                'cancelled_by' => 'provider',
-                'cancellation_reason' => $reason,
-                'rejected_at' => now()   //  عمود غير موجود
-            ]);
-            $this->firebaseNotificationService->sendToUser(
-        $booking->user_id,
-         __('notif_booking_rejected_title'),
-         __('notif_booking_rejected_body', ['reason' => $reason]),
-          ['action' => 'booking_rejected', 'booking_id' => $booking->id]    );
+//             Gate::authorize('reject', $booking); // تأكد من إضافة دالة reject في الـ BookingPolicy
 
-    return response()->json([
-        'success' => true,
-        'message' => 'تم رفض الحجز بنجاح.',
-        'data'    => $booking,
-    ]);
-}
+//             $booking->update([
+//                 'status' => 'rejected',
+//                 'cancelled_by' => 'provider',
+//                 'cancellation_reason' => $reason,
+//                 'rejected_at' => now()   //  عمود غير موجود
+//             ]);
+//             $this->firebaseNotificationService->sendToUser(
+//         $booking->user_id,
+//          __('notif_booking_rejected_title'),
+//          __('notif_booking_rejected_body', ['reason' => $reason]),
+//           ['action' => 'booking_rejected', 'booking_id' => $booking->id]    );
+
+//     return response()->json([
+//         'success' => true,
+//         'message' => 'تم رفض الحجز بنجاح.',
+//         'data'    => $booking,
+//     ]);
+// }
+//     ); }
 }

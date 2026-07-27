@@ -17,7 +17,6 @@ class ListingController extends Controller
 {
     protected ListingService $listingService;
 
-
     public function __construct(ListingService $listingService)
     {
         $this->listingService = $listingService;
@@ -70,7 +69,7 @@ public function getCompanyInventory(Request $request): JsonResponse
   
    public function index(): JsonResponse
 {
-    // Gate::authorize('viewAny', Listing::class);
+    Gate::authorize('viewAny', Listing::class);
 
     $listings = $this->listingService->getAllListings();
 
@@ -129,8 +128,6 @@ public function destroy(Listing $listing): JsonResponse
 
     try {
         $this->listingService->deleteListing($listing);
-
-
         
         return response()->json([
             'success' => true,
@@ -162,7 +159,6 @@ public function destroy(Listing $listing): JsonResponse
         'variants.packageItems.includedVariant.listing',
         'variants.packageFreelancers.freelancer',
     ])->findOrFail($id);
-    Gate::authorize('view', $listing);
 
     return response()->json([
         'success' => true,
@@ -264,4 +260,187 @@ public function getCompanyServices(Request $request): JsonResponse
         ], 500);
     }
 }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // 📱 Endpoints عامة لتطبيق الموبايل: تصفح "العروض" الموجودة على المنصة
+    // (منشورة/معتمدة فقط) مقسّمة حسب النوع: صالات، خدمات، باقات، منتجات.
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * أساس مشترك لكل استعلامات تصفح العروض:
+     * - listing_type محدد
+     * - moderation_status = approved فقط (ما نعرض مسودات/معلّقة/مرفوضة للعميل)
+     * - المزوّد نفسه لازم يكون is_active (مش موقوف/مرفوض) عشان ما نعرض عروض
+     *   تابعة لمزوّد اتوقف حسابه بعد اعتماد الإعلان.
+     * - فلاتر اختيارية: category_id, district_id, search (على العنوان).
+     */
+    private function buildPublicOffersQuery(string $listingType, Request $request)
+    {
+        $query = Listing::query()
+            ->where('listing_type', $listingType)
+            ->where('moderation_status', 'approved')
+            ->whereHas('provider', fn ($q) => $q->where('is_active', true));
+
+        if ($request->filled('category_id')) {
+            $query->where('category_id', $request->query('category_id'));
+        }
+
+        if ($request->filled('district_id')) {
+            $query->where('district_id', $request->query('district_id'));
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->query('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('title->ar', 'like', "%{$search}%")
+                    ->orWhere('title->en', 'like', "%{$search}%");
+            });
+        }
+
+        return $query->latest();
+    }
+
+    private function paginatedMeta($paginator): array
+    {
+        return [
+            'current_page' => $paginator->currentPage(),
+            'last_page'    => $paginator->lastPage(),
+            'total'        => $paginator->total(),
+            'per_page'     => $paginator->perPage(),
+        ];
+    }
+
+    /**
+     * GET /offers/halls
+     * تصفح الصالات المعتمدة والمتاحة على المنصة (لعرضها بتطبيق الموبايل).
+     */
+    public function getHallsOffers(Request $request): JsonResponse
+    {
+        try {
+            $halls = $this->buildPublicOffersQuery('hall', $request)
+                ->with([
+                    'images',
+                    'category',
+                    'district',
+                    'provider.user',
+                    'variants.images',
+                    'variants.availabilities.slots',
+                ])
+                ->paginate($request->query('per_page', 15));
+
+            return response()->json([
+                'success' => true,
+                'meta'    => $this->paginatedMeta($halls),
+                'data'    => ListingResource::collection($halls),
+            ], Response::HTTP_OK);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('ListingController@getHallsOffers failed', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب الصالات.',
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /offers/services
+     * تصفح باقات/عروض الخدمات المعتمدة على المنصة.
+     */
+    public function getServicesOffers(Request $request): JsonResponse
+    {
+        try {
+            $services = $this->buildPublicOffersQuery('service', $request)
+                ->with([
+                    'images',
+                    'category',
+                    'district',
+                    'provider.user',
+                    'variants.images',
+                    'variants.availabilities.slots',
+                ])
+                ->paginate($request->query('per_page', 15));
+
+            return response()->json([
+                'success' => true,
+                'meta'    => $this->paginatedMeta($services),
+                'data'    => ListingResource::collection($services),
+            ], Response::HTTP_OK);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('ListingController@getServicesOffers failed', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب الخدمات.',
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /offers/packages
+     * تصفح الباقات الجاهزة (Packages/Arrangements) المعتمدة على المنصة.
+     * تُستخدم ArrangementResource لأنها الصيغة المخصصة أصلاً لعرض الباقات
+     * (نفس الاصطلاح المتبع بـ getCompanyInventory).
+     */
+    public function getPackagesOffers(Request $request): JsonResponse
+    {
+        try {
+            $packages = $this->buildPublicOffersQuery('package', $request)
+                ->with([
+                    'images',
+                    'category',
+                    'district',
+                    'provider.user',
+                    'variants.packageItems.includedVariant.listing',
+                    'variants.packageFreelancers.freelancer',
+                    'variants.availabilities.slots',
+                ])
+                ->paginate($request->query('per_page', 15));
+
+            return response()->json([
+                'success' => true,
+                'meta'    => $this->paginatedMeta($packages),
+                'data'    => ArrangementResource::collection($packages),
+            ], Response::HTTP_OK);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('ListingController@getPackagesOffers failed', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب الباقات.',
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /offers/products
+     * تصفح المنتجات المادية (Physical Products) المعتمدة على المنصة.
+     */
+    public function getProductsOffers(Request $request): JsonResponse
+    {
+        try {
+            $products = $this->buildPublicOffersQuery('physical_product', $request)
+                ->with([
+                    'images',
+                    'category',
+                    'district',
+                    'provider.user',
+                    'variants.images',
+                ])
+                ->paginate($request->query('per_page', 15));
+
+            return response()->json([
+                'success' => true,
+                'meta'    => $this->paginatedMeta($products),
+                'data'    => ListingResource::collection($products),
+            ], Response::HTTP_OK);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('ListingController@getProductsOffers failed', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب المنتجات.',
+            ], 500);
+        }
+    }
 }

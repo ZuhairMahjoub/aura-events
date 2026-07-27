@@ -26,8 +26,6 @@ class Provider extends Model
         'address_details',
         'is_active',
         'moderation_status',
-        'rejection_reason'
-        'moderation_status',        
         'rejection_reason',
         'qr_code_path'
     ];
