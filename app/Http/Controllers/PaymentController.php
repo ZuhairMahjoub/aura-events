@@ -57,7 +57,7 @@ class PaymentController extends Controller
     }
    public function viewProof(string $paymentId)
 {
-    $payment = Payment::find($paymentId);
+    $payment = Payment::with(['booking.provider'])->find($paymentId);
 
     if (!$payment) {
         return response()->json(['message' => 'عملية الدفع غير موجودة'], 404);
@@ -76,6 +76,13 @@ class PaymentController extends Controller
 
     $response->headers->set('X-Booking-Id', $payment->booking_id);
     $response->headers->set('X-Payment-Id', $payment->id);
+
+    $providerName = $payment->booking?->provider?->brand_name ?? $payment->booking?->provider?->name ?? 'Unknown';
+    $response->headers->set('X-Provider-Name', $providerName);
+
+    if ($payment->booking?->provider_id) {
+        $response->headers->set('X-Provider-Id', $payment->booking->provider_id);
+    }
 
     return $response;
 }
