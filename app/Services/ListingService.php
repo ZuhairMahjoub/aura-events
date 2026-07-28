@@ -14,7 +14,6 @@ class ListingService
         private readonly UpdateListingAction $updateListingAction
     ) {}
 
-    // Fix #9: Selective column loading + future dates only + limit(7) to avoid N+1
     public function getAllListings(int $perPage = 15): LengthAwarePaginator
     {
         return Listing::with([
