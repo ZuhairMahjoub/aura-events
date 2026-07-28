@@ -86,11 +86,7 @@ Route::middleware(['set_locale'])->group(function () {
     Route::post('verify-otp', [NewPasswordController::class, 'verifyOtp'])->name('password.verify-otp');
     Route::post('reset-password', [NewPasswordController::class, 'store'])->name('password.reset');
 
-    // NOTE: no is_admin / auth middleware on this at all in the original —
-    // kept as-is. Flagging again since it's a real exposure: anyone can
-    // call GET /admin/users unauthenticated. Say the word and I'll add
-    // ['auth:sanctum', 'is_admin'] — that's a middleware-only change,
-    // doesn't touch the URL.
+   
     Route::get('/admin/users', [AuthController::class, 'getFilteredUsers'])->name('admin.users.index');
 
     Route::post('/otp/resend', [AuthController::class, 'resendOtp'])->name('otp.resend');
@@ -130,18 +126,7 @@ Route::middleware(['set_locale'])->group(function () {
         Route::middleware('approved_provider')->group(function () {
             Route::get('/provider/inventory', [ListingController::class, 'getCompanyInventory'])->name('provider.inventory');
 
-            // NOTE: original registration order here put GET /{arrangementId}
-            // *before* the static routes (my-products, my-all-products,
-            // provider/my-arrangements, my-services). Laravel matches routes
-            // in registration order, so a request to
-            // /arrangements/my-products would actually be caught by
-            // {arrangementId} first (with arrangementId = "my-products"),
-            // never reaching ArrangementController::getMyProducts.
-            // I reordered — static routes before the dynamic {arrangementId}
-            // ones — to fix that. This changes *matching precedence*, not
-            // any URL string, but flagging it explicitly since you asked me
-            // not to change behavior silently. Revert the order if this was
-            // actually intentional / already handled elsewhere.
+           
             Route::prefix('arrangements')->name('arrangements.')->group(function () {
                 Route::post('/', [ArrangementController::class, 'store'])->middleware('throttle:10,1')->name('store');
                 Route::get('my-products', [ArrangementController::class, 'getMyProducts'])->name('my-products');
@@ -203,9 +188,7 @@ Route::middleware(['set_locale'])->group(function () {
     Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->name('admin.')->group(function () {
         Route::put('/{paymentId}/confirm', [PaymentController::class, 'confirmPayment'])->name('payments.confirm');
         Route::put('/{paymentId}/reject', [PaymentController::class, 'rejectPayment'])->name('payments.reject');
-        // Deduplicated: the exact same route (PUT /{paymentId}/reject)
-        // was registered twice in the original — pure dead code, removing
-        // it doesn't change behavior since the second one could never fire.
+      
 
         Route::put('/providers/{id}/approve', [AdminProviderController::class, 'approve'])->name('providers.approve');
         Route::put('/providers/{id}/reject', [AdminProviderController::class, 'reject'])->name('providers.reject');
@@ -213,9 +196,7 @@ Route::middleware(['set_locale'])->group(function () {
         Route::put('/listings/{id}/reject', [AdminListingController::class, 'reject'])->name('listings.reject');
         Route::get('/providers/{id}', [AdminProviderController::class, 'showProvider'])->name('providers.show');
 
-        // NOTE: literal typo "Organzier" preserved exactly from the
-        // original — do not fix without confirming the client doesn't
-        // depend on this exact spelling.
+     
         Route::get('/Organzier/{id}', [AdminProviderController::class, 'getUserDetails'])->name('organizer.show');
 
         Route::get('/dashboard-stats', [AdminDashboardController::class, 'stats'])->name('dashboard-stats');
@@ -223,7 +204,6 @@ Route::middleware(['set_locale'])->group(function () {
         Route::get('/listings/{id}', [AdminListingController::class, 'show'])->name('listings.show');
         Route::get('/listings/pending', [AdminListingController::class, 'pendingList'])->name('listings.pending');
         Route::get('/bookings/{id}', [AdminBookingController::class, 'show'])->name('bookings.show');
-        // يرجع: عدد providers لكل moderation_status، عدد listings لكل نوع/حالة، عدد bookings لكل status، إجمالي الإيرادات (paid bookings)، إلخ.
     });
 
     /*
@@ -246,12 +226,7 @@ Route::middleware(['set_locale'])->group(function () {
     Route::middleware(['auth:sanctum', 'approved_provider'])->group(function () {
         Route::get('/provider/profile', [ProviderController::class, 'profile'])->name('provider.profile.show');
 
-        // NOTE: literal path is "/admin/providers" despite living under
-        // `approved_provider` (not `is_admin`) — same mismatch flagged
-        // last time. Kept exactly as the original had it (URL + middleware
-        // untouched). Tell me if you want this moved under the admin
-        // group's `is_admin` middleware — that's a protection change only,
-        // URL stays /admin/providers either way.
+        
         Route::get('/admin/providers', [ProviderController::class, 'index'])->name('admin.providers.index');
 
         Route::put('/provider/profile', [ProviderController::class, 'update'])->name('provider.profile.update');
@@ -276,7 +251,6 @@ Route::middleware(['set_locale'])->group(function () {
         // word if you want these collapsed to /cart and /cart/count.
         Route::delete('/cart', [CartController::class, 'clear'])->name('clear');
         Route::get('/cart/count', [CartController::class, 'itemsCount'])->name('count');
-        // حالياً العميل يحتاج يحذف كل عنصر لحاله (removeItem مرة بمرة) - لا يوجد "إفراغ الكل"
     });
 
     /*
