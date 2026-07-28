@@ -5,7 +5,12 @@ namespace App\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class ListingResource extends JsonResource
+/**
+ * نفس بالضبط شكل حقول ListingResource (نفس الأسماء ونفس البنية)،
+ * بس باسم مختلف عشان نستخدمه بمكان/Endpoint خاص بالباقات الجاهزة
+ * (Ready Arrangements) بدون ما نأثر على أي مكان تاني بيستخدم ListingResource.
+ */
+class ReadyArrangementResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
@@ -24,7 +29,7 @@ class ListingResource extends JsonResource
             'rejection_reason'           => $this->rejection_reason,
 
             'category' => $this->relationLoaded('category') && $this->category
-                ? ['id' => $this->category->id, 'name' => $this->category->name]
+            ? ['id' => $this->category->id, 'name' => $this->category->name]
                 : null,
 
             'district' => $this->relationLoaded('district') && $this->district

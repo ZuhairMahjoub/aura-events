@@ -36,21 +36,24 @@ class CreateListingAction
             ]);
 
             // 2. معالجة صور الـ Listing الأساسية
-         if (isset($data['images']) && is_array($data['images'])) {
-    foreach ($data['images'] as $img) {
-        if (is_array($img) && !empty($img['path'])) {
-            $fullTempPath = Str::startsWith($img['path'], 'temp/')
-                ? $img['path']
-                : 'temp/' . $img['path'];
+            if (!empty($data['images']) && is_array($data['images'])) {
+                foreach ($data['images'] as $img) {
+                    // استخراج المسار سواء كان مرسلاً ككائن (Object) أو كنص مباشر (String)
+                    $path = is_array($img) ? ($img['path'] ?? $img['temp_path'] ?? null) : (is_string($img) ? $img : null);
 
-            $this->mediaService->moveAndAttach(
-                $fullTempPath,
-                $listing,
-                "listings/{$listing->id}/main"
-            );
-        }
-    }
-}
+                    if (!empty($path)) {
+                        $fullTempPath = Str::startsWith($path, 'temp/')
+                            ? $path
+                            : 'temp/' . $path;
+
+                        $this->mediaService->moveAndAttach(
+                            $fullTempPath,
+                            $listing,
+                            "listings/{$listing->id}/main"
+                        );
+                    }
+                }
+            }
 
             // 3. إنشاء المتغيرات (Variants) وتوابعها
             $this->syncVariantsAction->execute($listing, $data['variants']);
