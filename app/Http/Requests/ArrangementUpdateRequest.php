@@ -31,9 +31,8 @@ class ArrangementUpdateRequest extends FormRequest
             // ── Variant / pricing ────────────────────────────────────────────
             'price'      => 'sometimes|numeric|min:0|max:999999.99',
             'price_type' => 'sometimes|in:fixed,hourly',
-            'currency'   => 'sometimes|in:fixed,hourly',
             'capacity'   => 'sometimes|nullable|integer|min:1|max:10000',
-
+            'currency'   => 'sometimes|string|size:3',
             // ── Cancellation policies ────────────────────────────────────────
             'cancel_before_acceptance' => 'sometimes|boolean',
             'cancel_after_acceptance'  => 'sometimes|boolean',

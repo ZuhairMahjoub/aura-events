@@ -11,8 +11,8 @@ class BookingResource extends JsonResource
     {
         return [
             'id'           => $this->id,
-            'status'       => $this->status, 
-            
+            'status'       => $this->status,
+
             'price'        => $this->total_price ?? ($this->variant->price ?? 0),
             'currency'     => $this->variant->currency ?? 'USD',
 
@@ -23,14 +23,14 @@ class BookingResource extends JsonResource
                 'end_time'   => $this->slot->end_time,
             ] : null,
 
-            'provider_id'  => $this->provider_id, 
-
+            'provider_id'  => $this->provider_id,
+            'booked_date'  => $this->booked_date,
             'listing'      => [
                 'id'           => $this->listing->id ?? null,
                 'title'        => $this->listing->title ?? null,
                 'listing_type' => $this->listing->listing_type ?? null, // صالة، تنسيق، منتج
             ],
-            
+
             'variant'      => [
                 'id'   => $this->variant->id ?? null,
                 'name' => $this->variant->variant_name ?? null,

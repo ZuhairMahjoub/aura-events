@@ -83,6 +83,7 @@ class UpdateListingRequest extends FormRequest
             'variants.*.price_type' => ['required', Rule::in(['fixed', 'hourly'])],
             'variants.*.capacity'   => ['nullable', 'integer', 'min:1'],
             'variants.*.services'   => ['nullable', 'array'],
+            'variants.*.stock_quantity'   => ['nullable', 'integer', 'min:1'],
             // 🖼️ صور الـ Listing
             'images'         => ['nullable', 'array'],
             'images.*'       => ['nullable', 'array'],

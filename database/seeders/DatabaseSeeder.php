@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Database\Seeders\EdgeCaseDemoSeeder;
+use Database\Seeders\CompaniesFreelancersDealSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -20,7 +21,7 @@ class DatabaseSeeder extends Seeder
          RoleSeeder::class,
          CategorySeeder::class,
             GovernorateAndDistrictSeeder::class,
-            UserAndProviderSeeder::class,
+            CompaniesFreelancersDealSeeder::class,
         ]);
     }
 }
