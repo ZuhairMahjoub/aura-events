@@ -29,11 +29,11 @@ class ReadyArrangementResource extends JsonResource
             'rejection_reason'           => $this->rejection_reason,
 
             'category' => $this->relationLoaded('category') && $this->category
-                ? ['id' => $this->category->id, 'name' => $this->category->name_en]
+            ? ['id' => $this->category->id, 'name' => $this->category->name]
                 : null,
 
             'district' => $this->relationLoaded('district') && $this->district
-                ? ['id' => $this->district->id, 'name' => $this->district->name_en]
+                ? ['id' => $this->district->id, 'name' => $this->district->name]
                 : null,
 
             'provider' => $this->relationLoaded('provider') && $this->provider
