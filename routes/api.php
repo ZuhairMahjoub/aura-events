@@ -377,9 +377,9 @@ Route::middleware(['auth:sanctum', 'role:provider'])->group(function () {
     Route::post('/provider/upload-qr', [ProviderController::class, 'uploadQrCode'])->name('provider.upload-qr');
 });
 
-  
+
+
 Route::get('/listings/physical_products', [ListingController::class, 'getProductsOffers']);
-    Route::get('/listings/hall', [ListingController::class, 'getHallsOffers']);
-    Route::get('/listings/service', [ListingController::class, 'getServicesOffers']);
-    Route::get('/listings/package', [ListingController::class, 'getPackagesOffers']);
-    
+Route::get('/listings/hall', [ListingController::class, 'getHallsOffers']);
+Route::get('/listings/service', [ListingController::class, 'getServicesOffers']);
+Route::get('/listings/package', [ListingController::class, 'getPackagesOffers']);
