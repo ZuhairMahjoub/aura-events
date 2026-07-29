@@ -180,29 +180,34 @@ class BookingController extends Controller
             'data'    => $booking,
         ]);
     }
-    public function reject(string $bookingId)
-    {
-        // ... (التعليقات الخاصة بك) ...
-        $booking = Booking::findOrFail($bookingId);
+ public function reject(string $bookingId)
+{
+    $booking = Booking::findOrFail($bookingId);
 
-        Gate::authorize('reject', $booking);
+    Gate::authorize('reject', $booking);
 
-        // يفضل التأكد من وجود البروفايل لتجنب أخطاء 500
-        $providerProfile = request()->user()->providerProfile;
-        if (!$providerProfile) {
-            abort(403, 'يجب أن تمتلك ملف مزود خدمة لإجراء هذه العملية.');
-        }
-
-        $rejectedBooking = $this->bookingService->reject(
-            $bookingId,
-            $providerProfile->id,
-            request()->input('reason')
-        );
-
-        // إضافة استجابة مناسبة (مثال كـ API JSON Response)
-        return response()->json([
-            'message' => 'تم رفض الحجز بنجاح.',
-            'booking' => $rejectedBooking
-        ]);
+    $providerProfile = request()->user()->providerProfile;
+    if (!$providerProfile) {
+        abort(403, 'يجب أن تمتلك ملف مزود خدمة لإجراء هذه العملية.');
     }
+
+    $rejectedBooking = $this->bookingService->reject(
+        $bookingId,
+        $providerProfile->id,
+        request()->input('reason')
+    );
+
+    $this->firebaseNotificationService->sendToUser(
+        $rejectedBooking->user_id,
+        __('notif_booking_rejected_title'),
+        __('notif_booking_rejected_body'),
+        ['action' => 'booking_rejected', 'booking_id' => $rejectedBooking->id]
+    );
+
+    return response()->json([
+        'message' => 'تم رفض الحجز بنجاح.',
+        'booking' => $rejectedBooking
+    ]);
 }
+}
+
