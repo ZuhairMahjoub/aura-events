@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Filters\ListingFilter;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateListingRequest;
 use App\Http\Requests\StoreListingRequest;
@@ -10,7 +11,10 @@ use App\Models\Listing;
 use App\Services\ListingService;
 use App\Http\Resources\ListingResource;
 use App\Http\Resources\ReadyArrangementResource;
+use App\Models\ListingVariant;
+use App\Models\Provider;
 use Exception;
+use Illuminate\Database\Eloquent\Builder;
 use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Http\JsonResponse;
@@ -150,22 +154,20 @@ class ListingController extends Controller
         }
     }
 
-    public function show(string $id, Request $request): JsonResponse
+   public function show(string $id, Request $request)
     {
         $listing = Listing::with([
-            'images',
-            'provider',
-            'category',
-            'district',
-            'variants.images',
-            'variants.availabilities.slots',
+            'images', 
             'variants.packageItems.includedVariant.listing',
             'variants.packageFreelancers.freelancer',
+            'category',
+            'district'
         ])->findOrFail($id);
 
+     
         return response()->json([
-            'success' => true,
-            'data'    => new ListingResource($listing)
+            'status' => 'success',
+            'data' => $listing
         ]);
     }
     /**
@@ -262,43 +264,36 @@ class ListingController extends Controller
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // 📱 Endpoints عامة لتطبيق الموبايل: تصفح "العروض" الموجودة على المنصة
-    // (منشورة/معتمدة فقط) مقسّمة حسب النوع: صالات، خدمات، باقات، منتجات.
-    // ─────────────────────────────────────────────────────────────────────
 
-    /**
-     * أساس مشترك لكل استعلامات تصفح العروض:
-     * - listing_type محدد
-     * - moderation_status = approved فقط (ما نعرض مسودات/معلّقة/مرفوضة للعميل)
-     * - المزوّد نفسه لازم يكون is_active (مش موقوف/مرفوض) عشان ما نعرض عروض
-     *   تابعة لمزوّد اتوقف حسابه بعد اعتماد الإعلان.
-     * - فلاتر اختيارية: category_id, district_id, search (على العنوان).
-     */
-    private function buildPublicOffersQuery(string $listingType, Request $request)
+    private function buildPublicOffersQuery(string $listingType, Request $request): Builder
     {
         $query = Listing::query()
             ->where('listing_type', $listingType)
             ->where('moderation_status', 'approved')
             ->whereHas('provider', fn($q) => $q->where('is_active', true));
 
-        if ($request->filled('category_id')) {
-            $query->where('category_id', $request->query('category_id'));
-        }
+        (new ListingFilter($request))->apply($query);
 
-        if ($request->filled('district_id')) {
-            $query->where('district_id', $request->query('district_id'));
-        }
-
-        if ($request->filled('search')) {
-            $search = $request->query('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('title->ar', 'like', "%{$search}%")
-                    ->orWhere('title->en', 'like', "%{$search}%");
-            });
-        }
-
-        return $query->latest();
+        return $this->applySorting($query, $request);
+    }
+    private function applySorting(Builder $query, Request $request)
+    {
+        return match ($request->query('sort_by', 'latest')) {
+            'price_asc' => $query->orderBy(
+                ListingVariant::selectRaw('MIN(price)')
+                    ->whereColumn('listing_variants.listing_id', 'listings.id')
+                    ->whereNull('listing_variants.deleted_at')
+            ),
+            'price_desc' => $query->orderByDesc(
+                ListingVariant::selectRaw('MIN(price)')
+                    ->whereColumn('listing_variants.listing_id', 'listings.id')
+                    ->whereNull('listing_variants.deleted_at')
+            ),
+            'rating' => $query->orderByDesc(
+                Provider::select('rating')->whereColumn('providers.id', 'listings.provider_id')
+            ),
+            default => $query->latest(),
+        };
     }
 
     private function paginatedMeta($paginator): array
@@ -311,10 +306,7 @@ class ListingController extends Controller
         ];
     }
 
-    /**
-     * GET /offers/halls
-     * تصفح الصالات المعتمدة والمتاحة على المنصة (لعرضها بتطبيق الموبايل).
-     */
+
     public function getHallsOffers(Request $request): JsonResponse
     {
         try {

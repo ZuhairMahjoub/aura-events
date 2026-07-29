@@ -31,7 +31,26 @@ class BookingService
 
     public function book(BookingData $data): Booking
     {
+
         $listing = Listing::with(['provider', 'variants'])->findOrFail($data->listingId);
+
+        if ($listing->moderation_status !== 'approved') {
+            throw ValidationException::withMessages([
+                'listing_id' => 'هذا الإعلان غير متاح للحجز حالياً.',
+            ]);
+        }
+
+        if (! $listing->provider || ! $listing->provider->is_active) {
+            throw ValidationException::withMessages([
+                'listing_id' => 'مزوّد هذا الإعلان غير نشط حالياً.',
+            ]);
+        }
+
+        if ($listing->provider->moderation_status !== 'approved') {
+            throw ValidationException::withMessages([
+                'listing_id' => 'مزوّد هذا الإعلان غير معتمد حالياً.',
+            ]);
+        }
 
         if (! $listing->variants->contains('id', $data->variantId)) {
             throw ValidationException::withMessages([
@@ -169,7 +188,8 @@ class BookingService
 
             if ($booking->status !== 'accepted') {
                 throw new \DomainException(
-                    "لا يمكن تأكيد الدفع لحجز بحالة [{$booking->status}]، يجب أن يكون [accepted].", 400
+                    "لا يمكن تأكيد الدفع لحجز بحالة [{$booking->status}]، يجب أن يكون [accepted].",
+                    400
                 );
             }
 
@@ -194,7 +214,8 @@ class BookingService
 
             if (! in_array($booking->status, ['accepted', 'confirmed'], true)) {
                 throw new Exception(
-                    "يمكن فقط إنهاء الحجوزات المقبولة أو المؤكَّدة، الحالة الحالية: [{$booking->status}].", 400
+                    "يمكن فقط إنهاء الحجوزات المقبولة أو المؤكَّدة، الحالة الحالية: [{$booking->status}].",
+                    400
                 );
             }
 
@@ -202,13 +223,14 @@ class BookingService
             // فعلية دون أن تُدفع، حتى لو كانت الحالة 'accepted'.
             if ((float) $booking->total_price > 0 && $booking->payment_status !== 'paid') {
                 throw new \DomainException(
-                    'لا يمكن إكمال الحجز قبل تأكيد الدفع (payment_status يجب أن تكون paid).', 422
+                    'لا يمكن إكمال الحجز قبل تأكيد الدفع (payment_status يجب أن تكون paid).',
+                    422
                 );
             }
 
             $previousStatus = $booking->status;
 
-           $booking->update([
+            $booking->update([
                 'status'       => 'completed',
                 'completed_at' => now(),
             ]);
