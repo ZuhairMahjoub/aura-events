@@ -75,7 +75,7 @@ class ListingController extends Controller
 
     public function index(): JsonResponse
     {
-        Gate::authorize('viewAny', Listing::class);
+        // Gate::authorize('viewAny', Listing::class);
 
         $listings = $this->listingService->getAllListings();
 

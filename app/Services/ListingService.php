@@ -14,12 +14,12 @@ class ListingService
         private readonly UpdateListingAction $updateListingAction
     ) {}
 
-    public function getAllListings(int $perPage = 15): LengthAwarePaginator
+   public function getAllListings(int $perPage = 15): LengthAwarePaginator
     {
         return Listing::with([
-            'category:id,name_ar,name_en',
+            'category:id,name', // تم التعديل هنا
             'provider:id,user_id',
-            'district:id,name_ar,name_en',
+            'district:id,name', // وتم التعديل هنا أيضاً إذا كان جدول المناطق يحتوي على name فقط
             'images:id,imageable_id,imageable_type,path',
             'variants' => fn ($q) => $q->select('id', 'listing_id', 'variant_name', 'price', 'currency', 'price_type', 'stock_quantity'),
             'variants.images:id,imageable_id,imageable_type,path',
