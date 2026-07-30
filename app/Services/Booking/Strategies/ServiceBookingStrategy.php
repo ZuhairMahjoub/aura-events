@@ -51,9 +51,16 @@ class ServiceBookingStrategy implements BookingStrategyInterface
     public function reserveCapacity(BookingData $data): void
     {
         // ── Lock هو نقطة التزامن الوحيدة والحقيقية (TOCTOU-safe) ──────────
-        $slot = ListingSlot::lockForUpdate()->findOrFail($data->slotId);
+        // ── Lock هو نقطة التزامن الوحيدة والحقيقية (TOCTOU-safe) ──────────
+        $slot = ListingSlot::with('availability')->lockForUpdate()->findOrFail($data->slotId);
 
-        // ── فحص التعارض داخل الـ Lock ────────────────────────────────────
+        // ── فحص الانتماء: هل هذا الـ slot يخص فعلاً الـ variant المطلوب؟ ──
+        if (! $slot->availability || $slot->availability->listing_variant_id !== $data->variantId) {
+            throw ValidationException::withMessages([
+                'listing_slot_id' => 'الفترة الزمنية المحددة لا تنتمي لهذا العرض.',
+            ]);
+        }
+
         $overlapping = Booking::where('listing_variant_id', $data->variantId)
             ->where('booked_date', $data->bookedDate)
             ->whereIn('status', ['pending', 'accepted', 'confirmed'])
