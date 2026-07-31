@@ -44,6 +44,10 @@ use Illuminate\Support\Facades\DB;
  * confirmed, completed, cancelled. هيك الحجوزات مش بيانات وهمية منفصلة،
  * هي حجوزات حقيقية على listings/variants تم إنشاؤها فعلياً بنفس السيدر.
  *
+ * تعديل: عروض physical_product صارت منتج واقعي (كراسي مناسبات بعدة
+ * variants حقيقية: نوع/لون/مادة/سعر) عبر makeChairsListing() بدل
+ * placeholder عام "الباقة الأساسية" اللي كانت تجيه من makeListingWithVariant().
+ *
  * يتطلب تشغيل CategorySeeder وGovernorateAndDistrictSeeder أولاً
  * (نحتاج category_id وdistrict_id فعليين موجودين بالجداول).
  */
@@ -146,10 +150,7 @@ class CompaniesFreelancersDealSeeder extends Seeder
                 $company, 'hall', "صالة أفراح فاخرة - {$company->brand_name}",
                 $categories->random()->id, $districts->random()->id,
             );
-            $product = $this->makeListingWithVariant(
-                $company, 'physical_product', "مستلزمات وديكورات مناسبات - {$company->brand_name}",
-                $categories->random()->id, $districts->random()->id,
-            );
+            $product = $this->makeChairsListing($company, $categories->random()->id, $districts->random()->id);
 
             $bookableVariants->push(['variant' => $hall['variant'], 'slot' => $hall['slot']]);
             $bookableVariants->push(['variant' => $product['variant'], 'slot' => $product['slot']]);
@@ -214,7 +215,7 @@ if ($packageVariant) {
             ['الفريلانسرز (3)', $freelancers->pluck('brand_name')->implode(', ')],
             ['عقد التعاون', "{$dealCompany->brand_name} ↔ {$dealFreelancer->brand_name} (status: active)"],
             ['خدمة الفريلانسر', is_array($freelancerServiceListing->title) ? ($freelancerServiceListing->title['ar'] ?? '-') : (string) $freelancerServiceListing->title],
-            ['عروض كل شركة', 'صالة (hall) + منتج فيزيائي (physical_product) + باقة (package) تضم الاثنين'],
+            ['عروض كل شركة', 'صالة (hall) + كراسي مناسبات (physical_product) + باقة (package) تضم الاثنين'],
             ['package_items المُعبّأة', PackageItem::count() . ' صف'],
             ['package_freelancers المُعبّأة', PackageFreelancer::count() . ' صف (لباقة ' . $dealCompany->brand_name . ' فقط)'],
             ['مستخدمين organizer', $organizers->pluck('email')->implode(', ')],
@@ -334,6 +335,82 @@ if ($packageVariant) {
         $slot->setRelation('availability', $availability);
 
         return ['listing' => $listing, 'variant' => $variant, 'slot' => $slot];
+    }
+
+    /**
+     * منتج فيزيائي واقعي: تأجير كراسي مناسبات بـ variants حقيقية متنوعة
+     * (نوع/لون/مادة/سعر مختلف)، بدل placeholder عام "الباقة الأساسية"
+     * اللي كانت تجيه من makeListingWithVariant(). أول variant (الأرخص)
+     * هو يلي منستخدمه كعنصر بالـ package وكـ bookable variant بالحجوزات.
+     */
+    private function makeChairsListing(Provider $provider, int $categoryId, int $districtId): array
+    {
+        $listing = Listing::create([
+            'provider_id' => $provider->id,
+            'category_id' => $categoryId,
+            'district_id' => $districtId,
+            'title' => [
+                'ar' => "تأجير كراسي المناسبات - {$provider->brand_name}",
+                'en' => "Event Chairs Rental - {$provider->brand_name}",
+            ],
+            'description' => [
+                'ar' => 'كراسي عالية الجودة بعدة أنواع، مناسبة للأعراس والمناسبات الكبيرة.',
+                'en' => 'High quality chairs in multiple styles, suitable for weddings and large events.',
+            ],
+            'listing_type' => 'physical_product',
+            'moderation_status' => 'approved',
+            'material_composition' => 'معدن وقماش مخملي',
+            'is_provider_location_based' => true,
+            'cancel_before_acceptance' => true,
+            'cancel_after_acceptance' => false,
+            'cancel_before_payment' => true,
+        ]);
+
+        $variantsData = [
+            [
+                'name' => ['ar' => 'كرسي عادي (سعر القطعة)', 'en' => 'Standard Chair (per piece)'],
+                'price' => 5000,
+                'stock' => 300,
+                'attributes' => ['color' => 'أبيض', 'material' => 'معدن مطلي'],
+            ],
+            [
+                'name' => ['ar' => 'كرسي تشيفاري ذهبي (سعر القطعة)', 'en' => 'Gold Chiavari Chair (per piece)'],
+                'price' => 15000,
+                'stock' => 120,
+                'attributes' => ['color' => 'ذهبي', 'material' => 'خشب مطلي'],
+            ],
+        ];
+
+        $variants = collect($variantsData)->map(fn ($data) => ListingVariant::create([
+            'listing_id' => $listing->id,
+            'variant_name' => $data['name'],
+            'price' => $data['price'],
+            'currency' => 'SYP',
+            'price_type' => 'fixed',
+            'stock_quantity' => $data['stock'],
+            'dynamic_attributes' => $data['attributes'],
+        ]));
+
+        $primaryVariant = $variants->first();
+
+        $availability = ListingAvailability::create([
+            'listing_variant_id' => $primaryVariant->id,
+            'available_date' => now()->addDays(rand(10, 40))->toDateString(),
+            'is_blocked' => false,
+        ]);
+
+        $slot = ListingSlot::create([
+            'listing_availability_id' => $availability->id,
+            'slot_name' => 'الفترة المسائية',
+            'start_time' => '17:00:00',
+            'end_time' => '23:00:00',
+            'remaining_capacity' => 25,
+        ]);
+
+        $primaryVariant->setRelation('listing', $listing);
+        $slot->setRelation('availability', $availability);
+
+        return ['listing' => $listing, 'variant' => $primaryVariant, 'slot' => $slot];
     }
 
     /**

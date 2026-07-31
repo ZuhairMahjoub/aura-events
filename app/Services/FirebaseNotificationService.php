@@ -11,23 +11,50 @@ use Kreait\Firebase\Messaging\Notification;
 
 class FirebaseNotificationService
 {
-    protected Messaging $messaging;
+    protected ?Messaging $messaging = null;
 
-    public function __construct(Messaging $messaging)
+    public function __construct()
     {
-        $this->messaging = $messaging;
+        // يتم تحميل الفايربيز فقط عند الحاجة (Lazy Load) لتجنب توقف التطبيق
+    }
+
+    protected function getMessaging(): ?Messaging
+    {
+        if ($this->messaging === null) {
+            try {
+                $this->messaging = app(Messaging::class);
+            } catch (\Exception $e) {
+                Log::warning('Firebase Messaging not available: ' . $e->getMessage());
+                return null;
+            }
+        }
+        return $this->messaging;
     }
 
     public function sendToUser(string $userId, string $title, string $body, array $data = []): array
     {
+        $messaging = $this->getMessaging();
+
+        // إذا لم يكن الفايربيز متاحاً، نحفظ الإشعار في قاعدة البيانات فقط بدون التسبب بخطأ
+        if ($messaging === null) {
+            ModelsNotification::create([
+                'user_id' => $userId,
+                'title'   => $title,
+                'body'    => $body,
+                'data'    => $data,
+                'is_read' => false
+            ]);
+            return ['success' => false, 'message' => 'Firebase not configured, notification saved to DB only.'];
+        }
+
         try {
             $tokens = DeviceToken::where('user_id', $userId)->pluck('device_token')->toArray();
-
+            
             if (empty($tokens)) {
                 return ['success' => false, 'message' => 'No tokens found.'];
             }
 
-            $dbNotification = ModelsNotification::create([
+            ModelsNotification::create([
                 'user_id' => $userId,
                 'title'   => $title,
                 'body'    => $body,
@@ -39,30 +66,26 @@ class FirebaseNotificationService
                 ->withNotification(Notification::create($title, $body))
                 ->withData(array_map('strval', $data));
 
-            $report = $this->messaging->sendMulticast($message, $tokens);
+            $report = $messaging->sendMulticast($message, $tokens);
 
             if ($report->hasFailures()) {
                 $this->handleInvalidTokens($report->failures());
             }
 
             return [
-                'success' => true,
+                'success'       => true,
                 'success_count' => $report->successes()->count(),
                 'failure_count' => $report->failures()->count()
             ];
-
         } catch (\Exception $e) {
             Log::error("Firebase Error: " . $e->getMessage());
             return ['success' => false, 'message' => 'Error: ' . $e->getMessage()];
         }
     }
 
-   
     protected function handleInvalidTokens($failures): void
     {
-        if (!is_iterable($failures)) {
-            return;
-        }
+        if (!is_iterable($failures)) return;
 
         $invalidTokens = [];
         foreach ($failures as $failure) {
