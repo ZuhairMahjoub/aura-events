@@ -31,7 +31,14 @@ class HallBookingStrategy implements BookingStrategyInterface
 
     public function reserveCapacity(BookingData $data): void
     {
-        $slot = ListingSlot::lockForUpdate()->findOrFail($data->slotId);
+    
+        $slot = ListingSlot::with('availability')->lockForUpdate()->findOrFail($data->slotId);
+
+        if (! $slot->availability || $slot->availability->listing_variant_id !== $data->variantId) {
+            throw ValidationException::withMessages([
+                'listing_slot_id' => 'الفترة الزمنية المحددة لا تنتمي لهذا العرض.',
+            ]);
+        }
 
         $hasConflict = Booking::where('listing_slot_id', $data->slotId)
             ->where('booked_date', $data->bookedDate)

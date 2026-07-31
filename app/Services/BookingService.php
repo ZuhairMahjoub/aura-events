@@ -276,35 +276,69 @@ class BookingService
      * الخطوة 6: عند قبول حجز لفريلانسر، نحجز تاريخه تلقائياً بروزنامته
      * (source = booking) حتى ينمنع تعارضه بأي تنسيق آخر بنفس اليوم.
      */
-    private function blockFreelancerDateIfApplicable(Booking $booking): void
-    {
-        if ($booking->provider?->provider_type !== 'freelancer') {
-            return;
-        }
+  private function blockFreelancerDateIfApplicable(Booking $booking): void
+{
+    // ⚠️ إصلاح Bug #4.3: حجز من نوع 'package' لا يخص فريلانسر واحد مباشرة —
+    // provider_id هون هو الشركة (صاحبة الـ Listing)، فالفحص القديم
+    // ($booking->provider->provider_type !== 'freelancer') كان يرجع فوراً
+    // ويتجاهل بالكامل أي فريلانسر مشارك جوا package_freelancers، فروزنامتهم
+    // الشخصية ما كانت تنحجز إطلاقاً رغم التزامهم الفعلي بهاد اليوم.
+    if ($booking->booking_type === 'package') {
+        $this->blockPackageFreelancersDate($booking);
+        return;
+    }
 
-        // ⚠️ إصلاح جوهري: قبل كنا نحجز اليوم كامل بغض النظر عن وقت الحجز
-        // الفعلي، فحجزين بنفس اليوم بأوقات مختلفة تماماً (مثلاً 2:00 ظهراً
-        // و 7:00 مساءً) كانا يتصادمان بدون أي داعي حقيقي. هلق منستخدم
-        // بالضبط وقت الحجز (booked_start_time/booked_end_time، الجايين من
-        // الـ slot الفعلي) — ولو ما كان في وقت محدد (نادراً)، منرجع لحجز
-        // اليوم بالكامل كـ fallback آمن.
-        $startTime = $booking->booked_start_time;
-        $endTime   = $booking->booked_end_time;
+    if ($booking->provider?->provider_type !== 'freelancer') {
+        return;
+    }
 
-        // ⚠️ إصلاح الثغرة المكتشفة: كنا نستخدم updateOrCreate على
-        // (freelancer_id, blocked_date) فقط، فحجز ثانٍ بنفس اليوم كان
-        // يستبدل booking_id للحجز الأول بصمت بدل ما يُرفض — يعني الفريلانسر
-        // كان فعلياً يُقبل له حجزان متعارضان بنفس الوقت. هلق نتحقق فعلياً
-        // من عدم وجود تعارض زمني حقيقي قبل أي إنشاء، ونرمي استثناء واضح
-        // لو في تصادم، بدل الاستبدال الصامت.
-        if (FreelancerBlockedDate::hasConflict($booking->provider_id, $booking->booked_date, $startTime, $endTime)) {
+    $startTime = $booking->booked_start_time;
+    $endTime   = $booking->booked_end_time;
+
+    if (FreelancerBlockedDate::hasConflict($booking->provider_id, $booking->booked_date, $startTime, $endTime)) {
+        throw new \DomainException(
+            'هذا الفريلانسر لديه حجز أو حظر متعارض بنفس التاريخ والوقت بالفعل.'
+        );
+    }
+
+    FreelancerBlockedDate::create([
+        'freelancer_id' => $booking->provider_id,
+        'blocked_date'  => $booking->booked_date,
+        'start_time'    => $startTime,
+        'end_time'      => $endTime,
+        'source'        => 'booking',
+        'booking_id'    => $booking->id,
+    ]);
+}
+
+/**
+ * يحجز روزنامة كل فريلانسر مشارك فعلياً بالباقة (package_freelancers تبع
+ * الـ variant المحجوز)، بنفس منطق الفحص/الحجز المستخدم للحجز المباشر —
+ * فحص تعارض لكل واحد فيهم أولاً (كلهم قبل أي إنشاء، لضمان عدم حجز جزئي لو
+ * فشل واحد بالنص)، ثم حجزهم كلهم دفعة وحدة لو ما في أي تعارض.
+ */
+private function blockPackageFreelancersDate(Booking $booking): void
+{
+    $packageFreelancers = $booking->variant()->with('packageFreelancers')->first()?->packageFreelancers ?? collect();
+
+    if ($packageFreelancers->isEmpty()) {
+        return;
+    }
+
+    $startTime = $booking->booked_start_time;
+    $endTime   = $booking->booked_end_time;
+
+    foreach ($packageFreelancers as $packageFreelancer) {
+        if (FreelancerBlockedDate::hasConflict($packageFreelancer->freelancer_id, $booking->booked_date, $startTime, $endTime)) {
             throw new \DomainException(
-                'هذا الفريلانسر لديه حجز أو حظر متعارض بنفس التاريخ والوقت بالفعل.'
+                'أحد الفريلانسرز المشاركين بهذه الباقة لديه حجز أو حظر متعارض بنفس التاريخ والوقت بالفعل.'
             );
         }
+    }
 
+    foreach ($packageFreelancers as $packageFreelancer) {
         FreelancerBlockedDate::create([
-            'freelancer_id' => $booking->provider_id,
+            'freelancer_id' => $packageFreelancer->freelancer_id,
             'blocked_date'  => $booking->booked_date,
             'start_time'    => $startTime,
             'end_time'      => $endTime,
@@ -312,7 +346,7 @@ class BookingService
             'booking_id'    => $booking->id,
         ]);
     }
-
+}
     /**
      * الخطوة 6: عند رفض/إلغاء حجز فريلانسر، نحرر تاريخه من الروزنامة
      * (فقط التواريخ التي حجزها هذا الحجز تحديداً عبر booking_id).
