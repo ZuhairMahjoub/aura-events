@@ -15,7 +15,7 @@ class AdminBookingController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $bookings = Booking::with(['user', 'provider', 'listing'])
+        $bookings = Booking::with(['user', 'provider', 'listing','payments'])
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->input('status')))
             ->when($request->filled('booking_type'), fn ($q) => $q->where('booking_type', $request->input('booking_type')))
             ->when($request->filled('date_from'), fn ($q) => $q->whereDate('booked_date', '>=', $request->input('date_from')))
@@ -35,7 +35,7 @@ class AdminBookingController extends Controller
      */
     public function show(string $id): JsonResponse
     {
-        $booking = Booking::with(['user', 'provider', 'listing', 'variant'])->findOrFail($id);
+        $booking = Booking::with(['user', 'provider', 'listing', 'variant','payments'])->findOrFail($id);
 
         return response()->json([
             'success' => true,
