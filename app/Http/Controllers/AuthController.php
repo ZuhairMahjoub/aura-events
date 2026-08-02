@@ -288,22 +288,15 @@ class AuthController extends Controller
             $user->setAttribute('provider_type', $user->providerProfile?->provider_type ?? null);
         }
 
-        $this->firebaseNotificationService->sendToUser(
-            $user->id,
-            'New Login Detected 🔒',
-            'Your account was just accessed. If this wasn\'t you, please secure your account.',
-            [
-                'action' => 'security_alert',
-                'time'   => now()->toDateTimeString()
-            ],
-            $user->id,
-           __('notification_login_title'), 
-            __('notification_login_body'), 
-         [
+       $this->firebaseNotificationService->sendToUser(
+    $user->id,
+    __('notification_login_title'),
+    __('notification_login_body'),
+    [
         'action' => 'security_alert',
         'time'   => now()->toDateTimeString()
-         ]
-        );
+    ]
+);
 
         return response()->json([
             'status'  => 'success',
