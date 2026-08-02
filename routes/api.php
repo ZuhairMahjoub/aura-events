@@ -152,6 +152,7 @@ Route::middleware(['set_locale'])->group(function () {
     Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function () {
         Route::put('/{paymentId}/confirm', [PaymentController::class, 'confirmPayment']);
         Route::put('/{paymentId}/reject', [PaymentController::class, 'rejectPayment']);
+        Route::get('/payments', [PaymentController::class, 'index']);
         Route::put('/providers/{id}/approve', [AdminProviderController::class, 'approve']);
         Route::put('/providers/{id}/reject', [AdminProviderController::class, 'reject']);
         Route::put('/listings/{id}/approve', [AdminListingController::class, 'approve']);

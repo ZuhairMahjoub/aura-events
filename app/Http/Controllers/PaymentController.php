@@ -6,9 +6,22 @@ use App\Models\Payment;
 use App\Processors\BookingPaymentProcessor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\JsonResponse;
 
 class PaymentController extends Controller
 {
+    public function index(Request $request): JsonResponse
+{
+    $payments = Payment::with(['booking.user', 'booking.provider', 'booking.listing', 'booking.variant'])
+        ->when($request->filled('status'), fn ($q) => $q->where('status', $request->input('status')))
+        ->latest()
+        ->paginate($request->input('per_page', 20));
+
+    return response()->json([
+        'success' => true,
+        'data' => $payments,
+    ]);
+}
     // دالة الزبون: لرفع الملف فقط
    public function uploadProof(Request $request, BookingPaymentProcessor $processor)
 {
