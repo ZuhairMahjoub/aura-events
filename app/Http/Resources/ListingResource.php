@@ -52,7 +52,7 @@ class ListingResource extends JsonResource
                 : [],
 
             'variants' => $this->relationLoaded('variants')
-                ? $this->variants->map(fn($variant) => [
+                ? $this->filterVariantsByCapacity($this->variants, $request)->map(fn($variant) => [
                     'id'         => $variant->id,
                     'name'       => $variant->variant_name,
                     'price'      => (float) $variant->price,
@@ -60,7 +60,8 @@ class ListingResource extends JsonResource
                     'price_type' => $variant->price_type,
                     'stock'      => $variant->stock_quantity,
                     'attributes' => $variant->dynamic_attributes,
-                    'capacity'   => $variant->capacity,
+                   
+                    'capacity'   => $variant->dynamic_attributes['capacity'] ?? null,
 
                     'images' => $variant->relationLoaded('images')
                         ? $variant->images->map(fn($img) => [
@@ -122,5 +123,34 @@ class ListingResource extends JsonResource
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
+    }
+
+   
+    private function filterVariantsByCapacity(\Illuminate\Support\Collection $variants, Request $request): \Illuminate\Support\Collection
+    {
+        $min = $request->query('capacity_min');
+        $max = $request->query('capacity_max');
+
+        if ($min === null && $max === null) {
+            return $variants;
+        }
+
+        return $variants->filter(function ($variant) use ($min, $max) {
+            $capacity = $variant->dynamic_attributes['capacity'] ?? null;
+
+            if ($capacity === null) {
+                return false;
+            }
+
+            if ($min !== null && $capacity < (int) $min) {
+                return false;
+            }
+
+            if ($max !== null && $capacity > (int) $max) {
+                return false;
+            }
+
+            return true;
+        })->values();
     }
 }

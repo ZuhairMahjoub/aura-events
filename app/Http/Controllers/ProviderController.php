@@ -146,4 +146,65 @@ public function getProviders()
 
     return response()->json($providers, 200);
 }
+/**
+     * Display the specified resource.
+     */
+    public function show($id): JsonResponse
+    {
+        try {
+            $provider = Provider::with(['user', 'companyDetails', 'freelancerDetails', 'categories'])->find($id);
+
+            if (!$provider) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'المزود غير موجود.'
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data'   => [
+                    'user' => [
+                        'id'         => $provider->user?->id,
+                        'full_name'  => $provider->user?->first_name . ' ' . $provider->user?->last_name,
+                        'email'      => $provider->user?->email,
+                        'phone'      => $provider->user?->phone,
+                        'account_status' => $provider->user?->status,
+                    ],
+                    'provider' => [
+                        'id'                => $provider->id,
+                        'brand_name'        => $provider->brand_name,
+                        'provider_type'     => $provider->provider_type,
+                        'rating'            => (float) $provider->rating,
+                        'is_verified'       => (bool) $provider->is_verified,
+                        'is_active'         => (bool) $provider->is_active,
+                        'moderation_status' => $provider->moderation_status,
+                        'categories'        => $provider->categories->map(fn ($c) => [
+                            'id' => $c->id,
+                            'name_ar' => $c->getTranslation('name', 'ar'),
+                            'name_en' => $c->getTranslation('name', 'en'),
+                        ]),
+                    ],
+                    'provider_details' => $provider->provider_type === 'company'
+                        ? [
+                            'tax_number'      => $provider->companyDetails?->tax_number,
+                            'registration_no' => $provider->companyDetails?->registration_no,
+                            'district_id'     => $provider->companyDetails?->district_id,
+                            'address_details' => $provider->companyDetails?->address_details,
+                        ]
+                        : [
+                            'national_id'      => $provider->freelancerDetails?->national_id,
+                            'experience_years' => $provider->freelancerDetails?->experience_years,
+                        ],
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error("Show Provider Error: " . $e->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'حدث خطأ أثناء جلب البيانات، يرجى المحاولة لاحقاً.'
+            ], 500);
+        }
+    }
 }
