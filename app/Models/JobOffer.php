@@ -27,7 +27,8 @@ class JobOffer extends Model
         'experience_level',
         'company_equipment_provided',
         'job_requirements_and_scope',
-        'contact_info'
+        'contact_info',
+         'is_active',
     ];
 
     // الوظيفة تابعة لشركة

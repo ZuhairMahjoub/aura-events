@@ -17,7 +17,7 @@ class JobOfferService
             'company_id' => $companyId
         ]));
     }
-/**
+    /**
      * Get a specific job offer by ID
      */
     public function getJobOfferById($id)
@@ -26,7 +26,7 @@ class JobOfferService
             ->withCount('applications')
             ->find($id);
     }
-  public function getFreelancerAppliedJobs(string $freelancerId)
+    public function getFreelancerAppliedJobs(string $freelancerId)
     {
         return CompanyFreelancerContract::where('freelancer_id', $freelancerId)
             ->with([
@@ -41,11 +41,16 @@ class JobOfferService
      */
     public function getCompanyApplicants(string $companyId): Collection
     {
-        return CompanyFreelancerContract::where('company_id', $companyId)
+        return JobOffer::where('company_id', $companyId)
             ->with([
-                'freelancer.user:id,first_name,last_name,email',
-                'jobOffer:id,job_title,service_id',
-                'jobOffer.service:id,name,description'
+                'service:id,name,description', 
+                // 💡 التعديل هنا: فلترة الطلبات لتجلب فقط التي حالتهم pending
+                'applications' => function ($query) {
+                    $query->where('status', 'pending');
+                },
+                'applications.freelancer.user',             
+                'applications.freelancer.freelancerDetails',  
+                'applications.freelancer.categories'       
             ])
             ->orderBy('created_at', 'desc')
             ->get();
@@ -72,13 +77,18 @@ class JobOfferService
     {
         $jobOffer = JobOffer::findOrFail($jobOfferId);
 
+        // لا يمكن التقديم إذا الشركة عطّلت العرض
+        if (!$jobOffer->is_active) {
+            return null;
+        }
+
         // التحقق من عدم التقديم المسبق
         $exists = CompanyFreelancerContract::where('freelancer_id', $freelancerId)
             ->where('job_offer_id', $jobOffer->id)
             ->exists();
 
         if ($exists) {
-            return null; // تعني أنه تقدم مسبقاً وسيتعامل معها الكنترولر ليعيد خطأ
+            return null;
         }
 
         return CompanyFreelancerContract::create([
@@ -90,10 +100,24 @@ class JobOfferService
     }
     public function getAllJobOffers()
 {
-    // جلب الوظائف مع بيانات الشركة الناشرة لها
     return \App\Models\JobOffer::with('provider:id,brand_name')
-         // جلب الوظائف النشطة فقط
+        // جلب الوظائف المفعّلة فقط
+        ->where('is_active', true)
         ->latest()
         ->paginate(15);
 }
+
+    /**
+     * تفعيل / تعطيل عرض العمل من قبل الشركة صاحبته
+     */
+    public function toggleActive(string $jobOfferId, string $companyId): JobOffer
+    {
+        $jobOffer = JobOffer::where('id', $jobOfferId)
+            ->where('company_id', $companyId)
+            ->firstOrFail();
+
+        $jobOffer->update(['is_active' => !$jobOffer->is_active]);
+
+        return $jobOffer;
+    }
 }

@@ -19,7 +19,7 @@ class ContractController extends Controller
 
         $contracts = CompanyFreelancerContract::with(['company', 'jobOffer'])
             ->where('freelancer_id', $freelancer->id)
-            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->input('status')))
+            ->when($request->filled('status'), fn($q) => $q->where('status', $request->input('status')))
             ->latest()
             ->paginate($request->input('per_page', 15));
 
@@ -38,9 +38,14 @@ class ContractController extends Controller
     {
         $company = $request->user()->providerProfile;
 
-        $contracts = CompanyFreelancerContract::with(['freelancer', 'jobOffer'])
+        $contracts = CompanyFreelancerContract::with([
+            'freelancer.user',
+            'freelancer.freelancerDetails',
+            'freelancer.categories',
+            'jobOffer'
+        ])
             ->where('company_id', $company->id)
-            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->input('status')))
+            ->when($request->filled('status'), fn($q) => $q->where('status', $request->input('status')))
             ->latest()
             ->paginate($request->input('per_page', 15));
 
