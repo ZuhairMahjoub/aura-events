@@ -6,6 +6,7 @@ use App\Services\JobOfferService;
 use App\Http\Requests\StoreJobOfferRequest;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use App\Models\JobOffer;
 
 /**
  * إصلاحات مطبقة على هذا الملف:
@@ -73,7 +74,7 @@ class JobOfferController extends Controller
             'data' => $applicants,
         ], 200);
     }
-/**
+    /**
      * جلب تفاصيل عرض عمل معين بواسطة المعرّف (ID)
      */
     public function show($id): JsonResponse
@@ -126,23 +127,46 @@ class JobOfferController extends Controller
     /**
      * [خاص بالتطبيق] فريلانسر يقدم على وظيفة
      */
-    public function apply(Request $request, $jobOfferId): JsonResponse
+   public function apply(Request $request, $jobOfferId): JsonResponse
+{
+    $freelancer = $request->user()->providerProfile;
+
+    $application = $this->jobOfferService->applyToJob($jobOfferId, $freelancer->id);
+
+    if (!$application) {
+        $jobOffer = \App\Models\JobOffer::find($jobOfferId);
+        $message = ($jobOffer && !$jobOffer->is_active)
+            ? 'عذراً، هذا العرض غير مفعّل حالياً من قبل الشركة.'
+            : 'لقد قمت بالتقديم على هذه الوظيفة مسبقاً.';
+
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+        ], 400);
+    }
+
+    return response()->json([
+        'success' => true,
+        'message' => 'تم تقديم طلبك بنجاح، وظهر الآن في لوحة تحكم الشركة.',
+        'data' => $application,
+    ], 201);
+}
+
+    /**
+     * [الشاشة الغامقة] تفعيل / تعطيل عرض العمل يدوياً من قبل الشركة
+     */
+    public function toggleActive(Request $request, $jobOfferId): JsonResponse
     {
-        $freelancer = $request->user()->providerProfile;
+        $company = $request->user()->providerProfile;
 
-        $application = $this->jobOfferService->applyToJob($jobOfferId, $freelancer->id);
+        $jobOffer = $this->jobOfferService->toggleActive($jobOfferId, $company->id);
 
-        if (!$application) {
-            return response()->json([
-                'success' => false,
-                'message' => 'لقد قمت بالتقديم على هذه الوظيفة مسبقاً.',
-            ], 400);
-        }
+        $statusLabel = $jobOffer->is_active ? 'مفعّل (Active)' : 'غير مفعّل (Inactive)';
 
         return response()->json([
             'success' => true,
-            'message' => 'تم تقديم طلبك بنجاح، وظهر الآن في لوحة تحكم الشركة.',
-            'data' => $application,
-        ], 201);
+            'message' => "تم تحديث حالة عرض العمل إلى: {$statusLabel}.",
+            'data' => $jobOffer,
+        ], 200);
     }
 }

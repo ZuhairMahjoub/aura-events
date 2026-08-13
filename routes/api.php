@@ -214,6 +214,7 @@ Route::middleware(['set_locale'])->group(function () {
 
     Route::middleware(['auth:sanctum', 'approved_provider', 'provider_type:company'])->group(function () {
         Route::post('/job-offers', [JobOfferController::class, 'store']);
+        Route::patch('/job-offers/{id}/toggle-active', [JobOfferController::class, 'toggleActive']);
         Route::get('/company/applicants', [JobOfferController::class, 'getApplicants']);
         Route::put('/contracts/{id}/status', [JobOfferController::class, 'updateApplicantStatus']);
         Route::get('/company/contracts', [ContractController::class, 'companyContracts']);
