@@ -52,7 +52,7 @@ class ListingResource extends JsonResource
                 : [],
 
             'variants' => $this->relationLoaded('variants')
-                ? $this->variants->map(fn($variant) => [
+                ? $this->filterVariantsByCapacity($this->variants, $request)->map(fn($variant) => [
                     'id'         => $variant->id,
                     'name'       => $variant->variant_name,
                     'price'      => (float) $variant->price,
@@ -60,7 +60,14 @@ class ListingResource extends JsonResource
                     'price_type' => $variant->price_type,
                     'stock'      => $variant->stock_quantity,
                     'attributes' => $variant->dynamic_attributes,
-                    'capacity'   => $variant->capacity,
+                    // capacity مش عمود مستقل بجدول listing_variants — القيمة
+                    // محفوظة جوا JSON column اسمه dynamic_attributes، فلازم
+                    // نقرأها من هناك بدل $variant->capacity (اللي كان دايماً
+                    // بيرجع null لأنو العمود أصلاً مش موجود).
+                    // ⚠️ هالسطر رجع لنسخته القديمة ($variant->capacity) بعد
+                    // git pull سابق — لو رجعت capacity تطلع null، هون أول
+                    // مكان تتأكد منه.
+                    'capacity'   => $variant->dynamic_attributes['capacity'] ?? null,
 
                     'images' => $variant->relationLoaded('images')
                         ? $variant->images->map(fn($img) => [
@@ -122,5 +129,40 @@ class ListingResource extends JsonResource
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * لو الطلب فيه capacity_min و/أو capacity_max، منستبعد الـ variants
+     * اللي ما بتحقق الشرط بدل ما نرجّع كل variants الـ listing.
+     *
+     * ملاحظة: بتقرا capacity_min/max من input() (مش query() بس) عشان
+     * تشتغل سواء انبعتوا بالـ URL query string أو بالـ body.
+     */
+    private function filterVariantsByCapacity(\Illuminate\Support\Collection $variants, Request $request): \Illuminate\Support\Collection
+    {
+        $min = $request->input('capacity_min');
+        $max = $request->input('capacity_max');
+
+        if ($min === null && $max === null) {
+            return $variants;
+        }
+
+        return $variants->filter(function ($variant) use ($min, $max) {
+            $capacity = $variant->dynamic_attributes['capacity'] ?? null;
+
+            if ($capacity === null) {
+                return false;
+            }
+
+            if ($min !== null && $capacity < (int) $min) {
+                return false;
+            }
+
+            if ($max !== null && $capacity > (int) $max) {
+                return false;
+            }
+
+            return true;
+        })->values();
     }
 }

@@ -24,36 +24,8 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Seeder: 3 شركات + 3 فريلانسرز + عقد تعاون بين واحدة من كل نوع + عروض
- * إعلانات لكل شركة (hall, package, physical_product) + خدمة للفريلانسر
- * المرتبط بالعقد.
- *
- * إصلاح جوهري: الـ package لم يكن يُبنى فعلياً عبر CreateArrangementAction
- * (المسار الحقيقي المستخدم بالتطبيق)، بل عبر Listing::create() مباشرة —
- * وهذا يتخطى بالكامل SyncPackageItemsAction وSyncPackageFreelancersAction،
- * فيترك جدولي package_items وpackage_freelancers فارغين تماماً رغم وجود
- * "باقة" شكلياً بجدول listings. الآن نستخدم الـ Action الحقيقي، ونمرر له
- * items (من hall/physical_product تابعين لنفس الشركة) وfreelancers (من
- * عقد التعاون الفعلي) لضمان تعبئة الجدولين.
- *
- * إضافة جديدة (دمج): بعد إنشاء كل العروض الحقيقية فوق، نضيف مستخدمين
- * organizer (منظّمين/عملاء عاديين) ونخليهم يحجزوا فعلياً على هالعروض
- * نفسها (hall, physical_product, service, package) — مع تغطية كل
- * حالات الحجز الست الموجودة بالـ enum: pending, accepted, rejected,
- * confirmed, completed, cancelled. هيك الحجوزات مش بيانات وهمية منفصلة،
- * هي حجوزات حقيقية على listings/variants تم إنشاؤها فعلياً بنفس السيدر.
- *
- * تعديل: عروض physical_product صارت منتج واقعي (كراسي مناسبات بعدة
- * variants حقيقية: نوع/لون/مادة/سعر) عبر makeChairsListing() بدل
- * placeholder عام "الباقة الأساسية" اللي كانت تجيه من makeListingWithVariant().
- *
- * يتطلب تشغيل CategorySeeder وGovernorateAndDistrictSeeder أولاً
- * (نحتاج category_id وdistrict_id فعليين موجودين بالجداول).
- */
 class CompaniesFreelancersDealSeeder extends Seeder
 {
-    /** كل حالات الحجز الموجودة فعلياً بجدول bookings */
     private const BOOKING_STATUSES = ['pending', 'accepted', 'rejected', 'confirmed', 'completed', 'cancelled'];
 
     public function run(): void
@@ -66,10 +38,6 @@ class CompaniesFreelancersDealSeeder extends Seeder
             return;
         }
 
-        // كل شي داخل transaction وحدة: بدل ~40 commit منفصل (كل insert لحاله)
-        // صار commit واحد بالنهاية — أسرع بكثير، وبيضمن كمان إنو لو صار خطأ
-        // بأي خطوة (مثلاً بالـ CreateArrangementAction)، ما تنعمل أي بيانات
-        // جزئية ناقصة بقاعدة البيانات (rollback تلقائي للكل مش لجزء بس).
         DB::transaction(function () use ($categories, $districts) {
             $this->seedEverything($categories, $districts);
         });
@@ -77,21 +45,12 @@ class CompaniesFreelancersDealSeeder extends Seeder
 
     private function seedEverything(Collection $categories, Collection $districts): void
     {
-        // ────────────────────────────────────────────────────────────
-        // 1. إنشاء 3 شركات
-        // ────────────────────────────────────────────────────────────
         $companies = collect(['قصر الأفراح الذهبي', 'مؤسسة الإبداع للفعاليات', 'شركة روائع المناسبات'])
             ->map(fn ($name) => $this->makeCompany($name, $categories, $districts));
 
-        // ────────────────────────────────────────────────────────────
-        // 2. إنشاء 3 فريلانسرز
-        // ────────────────────────────────────────────────────────────
         $freelancers = collect(['أحمد المصور', 'سارة منسقة الحفلات', 'خالد الديكوريتور'])
             ->map(fn ($name) => $this->makeFreelancer($name, $categories));
 
-        // ────────────────────────────────────────────────────────────
-        // 3. عقد تعاون بين أول شركة وأول فريلانسر (يحتاج JobOffer أولاً)
-        // ────────────────────────────────────────────────────────────
         $dealCompany = $companies->first();
         $dealFreelancer = $freelancers->first();
 
@@ -114,13 +73,6 @@ class CompaniesFreelancersDealSeeder extends Seeder
             'status' => 'active',
         ]);
 
-        // ────────────────────────────────────────────────────────────
-        // 4. خدمة الفريلانسر (منفصلة عن خدمة التعاقد، تمثّل عرضه الخاص)
-        // ────────────────────────────────────────────────────────────
-        // ملاحظة: الخدمات (Service) مرتبطة حالياً بالشركات فقط (company_id)،
-        // فريلانسر لا يملك جدول Service خاص به بالبنية الحالية للمشروع.
-        // لتمثيل "خدمة الفريلانسر" الفعلية، ننشئ Listing من نوع 'service'
-        // مملوك للفريلانسر نفسه (provider_id يقبل company أو freelancer معاً).
         $freelancerService = $this->makeListingWithVariant(
             $dealFreelancer,
             'service',
@@ -130,18 +82,6 @@ class CompaniesFreelancersDealSeeder extends Seeder
         );
         $freelancerServiceListing = $freelancerService['listing'];
 
-        // ────────────────────────────────────────────────────────────
-        // 5. عروض الشركات — hall وphysical_product أولاً (نحتاجهم كعناصر
-        //    للـ package بالخطوة التالية)، ثم الـ package نفسه عبر الـ
-        //    Action الحقيقي بدل Listing::create() المباشر.
-        // ────────────────────────────────────────────────────────────
-
-        // نجمّع هون كل الـ listings/variants الحقيقية اللي بينشئها هالسيدر،
-        // عشان نحجز عليها فعلياً بالقسم 6 تحت (بدل ما ننشئ بيانات موازية).
-        // كل عنصر هون هو ['variant' => ListingVariant, 'slot' => ListingSlot|null]
-        // — الـ slot موجود لكل hall/service/physical_product (عندها availability
-        // slots حقيقية)، وبيضل null بس للـ package (الـ Arrangement Action
-        // الحالي ما بينشئ slots له بهذا المشروع، فمنطقياً حجزه بدون slot محدد).
         $bookableVariants = collect();
         $bookableVariants->push(['variant' => $freelancerService['variant'], 'slot' => $freelancerService['slot']]);
 
@@ -155,9 +95,6 @@ class CompaniesFreelancersDealSeeder extends Seeder
             $bookableVariants->push(['variant' => $hall['variant'], 'slot' => $hall['slot']]);
             $bookableVariants->push(['variant' => $product['variant'], 'slot' => $product['slot']]);
 
-            // الفريلانسرز يُضافون فقط لباقة الشركة التي تملك عقداً فعلياً
-            // معهم (dealCompany) — باقي الشركات ليس لديها عقود، فباقاتهم
-            // تُبنى بعناصر (items) فقط بدون freelancers، وهذا واقعي تماماً.
             $freelancersForPackage = $company->is($dealCompany)
                 ? [['freelancer_id' => $dealFreelancer->id, 'contract_id' => $contract->id]]
                 : [];
@@ -174,38 +111,31 @@ class CompaniesFreelancersDealSeeder extends Seeder
                 freelancers: $freelancersForPackage,
             );
 
-$packageVariant = $packageListing->loadMissing('variants')->variants->first();
+            $packageVariant = $packageListing->loadMissing('variants')->variants->first();
 
-if ($packageVariant) {
-    $packageVariant->setRelation('listing', $packageListing);
+            if ($packageVariant) {
+                $packageVariant->setRelation('listing', $packageListing);
 
-    // 1. إنشاء توفر (Availability) للباقة في تاريخ محدد
-    $packageAvailability = \App\Models\ListingAvailability::create([
-        'listing_variant_id' => $packageVariant->id,
-        'available_date'     => now()->addDays(20)->toDateString(),
-        'is_blocked'         => false,
-    ]);
+                $packageAvailability = \App\Models\ListingAvailability::create([
+                    'listing_variant_id' => $packageVariant->id,
+                    'available_date'     => now()->addDays(20)->toDateString(),
+                    'is_blocked'         => false,
+                ]);
 
-    // 2. إنشاء فترة زمنية (Slot) مرتبطة بهذا التوفر
-    $packageSlot = \App\Models\ListingSlot::create([
-        'listing_availability_id' => $packageAvailability->id,
-        'slot_name'               => 'الفترة الصباحية للباقة',
-        'start_time'              => '10:00:00',
-        'end_time'                => '15:00:00',
-        'remaining_capacity'      => 1,
-    ]);
+                $packageSlot = \App\Models\ListingSlot::create([
+                    'listing_availability_id' => $packageAvailability->id,
+                    'slot_name'               => 'الفترة الصباحية للباقة',
+                    'start_time'              => '10:00:00',
+                    'end_time'                => '15:00:00',
+                    'remaining_capacity'      => 1,
+                ]);
 
-    // 3. حقن العلاقة في الذاكرة لتسهيل عملية الحجز لاحقاً
-    $packageSlot->setRelation('availability', $packageAvailability);
+                $packageSlot->setRelation('availability', $packageAvailability);
 
-    // تمرير الـ slot الحقيقي بدلاً من null
-    $bookableVariants->push(['variant' => $packageVariant, 'slot' => $packageSlot]);
-}
+                $bookableVariants->push(['variant' => $packageVariant, 'slot' => $packageSlot]);
+            }
         }
 
-        // ────────────────────────────────────────────────────────────
-        // 6. مستخدمين organizer + حجوزات حقيقية تغطي كل حالات الحجز
-        // ────────────────────────────────────────────────────────────
         $organizers = $this->makeOrganizers(2);
         $this->bookAllStatusesForOrganizers($organizers, $bookableVariants->filter()->values());
 
@@ -269,11 +199,13 @@ if ($packageVariant) {
     }
 
     /**
-     * ينشئ listing + variant + availability + slot، ويرجعهم مع بعض بدون
-     * أي استعلام إضافي (relations محقونة بالذاكرة مباشرة)، عشان الحجز
-     * لاحقاً يقدر ياخذ listing_slot_id حقيقي وتاريخ/وقت متطابقين مع
-     * الـ slot الفعلي، بدل ما يضل عمود listing_slot_id فاضي (null)
-     * وتاريخ الحجز عشوائي منفصل عن أي slot موجود فعلاً.
+     * الـ capacity هون منولّدها بمدى مختلف حسب نوع العرض (hall/service)
+     * بدل ما تضل null، حتى تنعكس فعلياً بـ dynamic_attributes ويقدر
+     * الفرونت يفلتر عليها.
+     *
+     * ⚠️ هاد الجزء (array_filter الأخير بـ dynamic_attributes) هو نفسه
+     * اللي رجع يختفي بعد آخر git pull من نسخة قديمة لهذا الملف — لو رجعت
+     * capacity تطلع null بالـ API تاني، هون أول مكان تتأكد منه.
      */
     private function makeListingWithVariant(
         Provider $provider,
@@ -300,6 +232,13 @@ if ($packageVariant) {
             'cancel_before_payment' => true,
         ]);
 
+        $capacity = match ($type) {
+            'hall' => rand(150, 500),
+            'package' => rand(80, 300),
+            'service' => rand(20, 100),
+            default => null,
+        };
+
         $variant = ListingVariant::create([
             'listing_id' => $listing->id,
             'variant_name' => ['ar' => 'الباقة الأساسية', 'en' => 'Basic Package'],
@@ -312,6 +251,9 @@ if ($packageVariant) {
             'currency' => 'SYP',
             'price_type' => $type === 'service' ? 'hourly' : 'fixed',
             'stock_quantity' => $type === 'physical_product' ? 25 : null,
+            'dynamic_attributes' => array_filter([
+                'capacity' => $capacity,
+            ], fn ($value) => $value !== null),
         ]);
 
         $availability = ListingAvailability::create([
@@ -328,9 +270,6 @@ if ($packageVariant) {
             'remaining_capacity' => $type === 'physical_product' ? 25 : 1,
         ]);
 
-        // نحقن الـ relations بالذاكرة مباشرة (setRelation) بدل ما نترك
-        // Eloquent يعيد جلبهم بعدين بـ query جديد لو حد نادى $variant->listing
-        // أو $slot->availability لاحقاً — توفير استعلامات فعلي، مش بس تنظيم.
         $variant->setRelation('listing', $listing);
         $slot->setRelation('availability', $availability);
 
@@ -338,10 +277,8 @@ if ($packageVariant) {
     }
 
     /**
-     * منتج فيزيائي واقعي: تأجير كراسي مناسبات بـ variants حقيقية متنوعة
-     * (نوع/لون/مادة/سعر مختلف)، بدل placeholder عام "الباقة الأساسية"
-     * اللي كانت تجيه من makeListingWithVariant(). أول variant (الأرخص)
-     * هو يلي منستخدمه كعنصر بالـ package وكـ bookable variant بالحجوزات.
+     * الـ capacity هون منربطها بعدد القطع المتوفرة فعلياً (stock).
+     * ⚠️ نفس التحذير أعلاه: تأكد إنو array_merge تحت لسا فيها 'capacity'.
      */
     private function makeChairsListing(Provider $provider, int $categoryId, int $districtId): array
     {
@@ -388,7 +325,9 @@ if ($packageVariant) {
             'currency' => 'SYP',
             'price_type' => 'fixed',
             'stock_quantity' => $data['stock'],
-            'dynamic_attributes' => $data['attributes'],
+            'dynamic_attributes' => array_merge($data['attributes'], [
+                'capacity' => $data['stock'],
+            ]),
         ]));
 
         $primaryVariant = $variants->first();
@@ -413,11 +352,6 @@ if ($packageVariant) {
         return ['listing' => $listing, 'variant' => $primaryVariant, 'slot' => $slot];
     }
 
-    /**
-     * يبني باقة (package) عبر CreateArrangementAction الحقيقي — بدل
-     * Listing::create() المباشر — ليضمن تعبئة package_items وpackage_freelancers
-     * فعلياً عبر SyncPackageItemsAction وSyncPackageFreelancersAction.
-     */
     private function makePackageArrangement(
         Provider $company,
         string $titleAr,
@@ -439,7 +373,7 @@ if ($packageVariant) {
             'price' => 2000000,
             'price_type' => 'fixed',
             'currency' => 'SYP',
-            'capacity' => 1,
+            'capacity' => rand(80, 300),
             'items' => $items,
             'freelancers' => $freelancers,
             'date_range' => [
@@ -449,9 +383,6 @@ if ($packageVariant) {
         ], $company->id);
     }
 
-    /**
-     * ينشئ مستخدمين organizer (منظّمين/عملاء عاديين) بـ role='organizer'.
-     */
     private function makeOrganizers(int $count): Collection
     {
         $organizerRole = Role::firstOrCreate(['name' => 'organizer', 'guard_name' => 'api']);
@@ -467,11 +398,6 @@ if ($packageVariant) {
             });
     }
 
-    /**
-     * لكل organizer: حجز واحد لكل حالة من حالات الحجز الست، على variants
-     * حقيقية تم إنشاؤها فعلياً بهذا السيدر (hall/product/service/package)
-     * بدوران بينها، بدل ما نعتمد نوع واحد فقط.
-     */
     private function bookAllStatusesForOrganizers(Collection $organizers, Collection $pairs): void
     {
         if ($pairs->isEmpty()) {
@@ -487,15 +413,6 @@ if ($packageVariant) {
         }
     }
 
-    /**
-     * ينشئ حجز واحد بحالة محددة، مع تنويع payment_status وحقول الإلغاء/الإكمال
-     * بما يطابق منطق BookingService الفعلي (مش قيم عشوائية).
-     *
-     * لو في slot حقيقي مرتبط بالـ variant (hall/service/physical_product)،
-     * منربط الحجز فيه فعلياً (listing_slot_id + نفس تاريخ ووقت الـ availability)
-     * بدل ما يضل العمود null وتاريخ الحجز عشوائي غير مرتبط بأي شي حقيقي.
-     * الـ package بدون slot (null) — منولّد إله تاريخ عشوائي مستقل، وهذا متوقع.
-     */
     private function createBookingWithStatus(User $organizer, ListingVariant $variant, ?ListingSlot $slot, string $status): Booking
     {
         $listing = $variant->listing;
