@@ -179,7 +179,7 @@ Route::middleware(['set_locale'])->group(function () {
         Route::get('/admin/providers', [ProviderController::class, 'index']);
         Route::put('/provider/profile', [ProviderController::class, 'update']);
     });
-
+    Route::get('/providers/{id}', [ProviderController::class, 'show']);
     Route::middleware('auth:sanctum')->prefix('cart')->group(function () {
         Route::get('/', [CartController::class, 'show']);
         Route::post('/items', [CartController::class, 'addItem']);

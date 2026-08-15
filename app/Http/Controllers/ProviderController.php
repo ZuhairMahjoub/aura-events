@@ -10,6 +10,14 @@ use Illuminate\Support\Facades\Log;
 
 class ProviderController extends Controller
 {
+    public function show($id)
+{
+    $provider = Provider::with('user')->findOrFail($id);
+    return response()->json([
+        'success' => true,
+        'data' => $provider
+    ], 200);
+}
  public function profile(Request $request): JsonResponse
 {
     try {
