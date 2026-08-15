@@ -82,6 +82,7 @@ class ListingController extends Controller
         'capacity_max' => 'sometimes|integer|min:0',
         'price_min' => 'sometimes|numeric|min:0',
         'price_max' => 'sometimes|numeric|min:0',
+        'title' => 'sometimes|string|max:255',
     ]);
 
     $listings = $this->listingService->getAllListings(
@@ -90,6 +91,7 @@ class ListingController extends Controller
         capacityMax: $request->query('capacity_max'),
         priceMin: $request->query('price_min'),
         priceMax: $request->query('price_max'),
+       title: $request->query('title'),
     );
 
     return ListingResource::collection($listings)

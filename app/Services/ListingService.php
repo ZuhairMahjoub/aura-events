@@ -13,13 +13,13 @@ class ListingService
         private readonly CreateListingAction $createListingAction,
         private readonly UpdateListingAction $updateListingAction
     ) {}
-
-  public function getAllListings(
+public function getAllListings(
     ?string $type = null,
     ?int $capacityMin = null,
     ?int $capacityMax = null,
     ?float $priceMin = null,
     ?float $priceMax = null,
+    ?string $title = null,
     int $perPage = 15,
 ): LengthAwarePaginator
 {
@@ -38,9 +38,21 @@ class ListingService
         'variants.availabilities.slots' => fn ($q) => $q
             ->select('id', 'listing_availability_id', 'slot_name', 'start_time', 'end_time', 'remaining_capacity'),
     ])
+    // Business rule: مفروضة دايماً، مش optional filter
+    ->where('moderation_status', 'approved')
+
     ->when($type, fn ($q) => $q->where('listing_type', $type))
-    
-    // فلتر السعة (Capacity)
+
+    ->when($title, function ($q) use ($title) {
+        $normalizedTitle = $this->normalizeArabic($title);
+
+        $q->where(function ($query) use ($title, $normalizedTitle) {
+            $query->where('title->ar', 'like', "{$title}%")
+                  ->orWhere('title->ar', 'like', "{$normalizedTitle}%")
+                  ->orWhere('title->en', 'like', "{$title}%");
+        });
+    })
+
     ->when($capacityMin || $capacityMax, function ($q) use ($capacityMin, $capacityMax) {
         $q->whereHas('variants', function ($variantQuery) use ($capacityMin, $capacityMax) {
             $variantQuery
@@ -49,7 +61,6 @@ class ListingService
         });
     })
 
-    // فلتر السعر (Price) المستقل تماماً
     ->when($priceMin || $priceMax, function ($q) use ($priceMin, $priceMax) {
         $q->whereHas('variants', function ($variantQuery) use ($priceMin, $priceMax) {
             $variantQuery
@@ -60,17 +71,18 @@ class ListingService
     ->latest()
     ->paginate($perPage);
 }
-    public function getListingById(string $id): Listing
-    {
-        return Listing::with([
-            'category',
-            'district',
-            'images',
-            'variants.images',
-            'variants.availabilities.slots'
-        ])->findOrFail($id);
-    }
-
+/**
+ * تطبيع الحروف العربية المتشابهة (همزات، تاء مربوطة، ياء)
+ * عشان "احترافي" تلاقي "إحترافي" والعكس
+ */
+private function normalizeArabic(string $text): string
+{
+    return str_replace(
+        ['أ', 'إ', 'آ', 'ة', 'ى', 'ئ'],
+        ['ا', 'ا', 'ا', 'ه', 'ي', 'ي'],
+        $text
+    );
+}
     public function createListingWithGraph(array $data): Listing
     {
         return $this->createListingAction->execute($data);
