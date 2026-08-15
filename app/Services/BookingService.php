@@ -469,10 +469,12 @@ private function blockPackageFreelancersDate(Booking $booking): void
             ->when($filters['status'] ?? null, fn($q, $status) => $q->where('status', $status))
             ->when($filters['booking_type'] ?? null, fn($q, $type) => $q->where('booking_type', $type))
             ->with([
-                'user:id,first_name,last_name,phone,email',
-                'listing:id,title,listing_type',
-                'variant:id,variant_name,price,currency',
-                'slot:id,slot_name,start_time,end_time',
+                'user', // مين حجز (الزبون كاملاً: اسم، هاتف، إيميل)
+                'slot',
+                'listing.images',
+                'listing.provider',
+                'variant.packageItems.includedVariant',
+                'variant.packageFreelancers.freelancer',
             ])
             ->latest()
             ->paginate($perPage);
