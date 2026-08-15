@@ -27,9 +27,13 @@ class FavoriteService
 
     public function list(string $userId, int $perPage = 15): LengthAwarePaginator
     {
+        // 1. نبدأ جلب الصالات من خلال علاقة المفضلة الخاصة بالمستخدم حصراً
         return Listing::query()
-            ->whereHas('favoritedBy', fn ($q) => $q->where('users.id', $userId))
+            ->whereHas('favoritedBy', function ($query) use ($userId) {
+                $query->where('users.id', $userId);
+            })
             
+            // 2. ترتيب الصالات المفضلة حسب الأحدث (حسب وقت إضافتها للمفضلة)
             ->orderByDesc(
                 Favorite::select('created_at')
                     ->whereColumn('favorites.listing_id', 'listings.id')
@@ -38,7 +42,7 @@ class FavoriteService
                     ->take(1)
             )
             
-            // 3. Eager load relations
+            // 3. جلب العلاقات المرتبطة بالصالات
             ->with([
                 'images', 
                 'variants.images', 

@@ -68,6 +68,7 @@ class ListingFactory extends Factory
         return $this->state(fn () => [
             'listing_type' => 'physical_product',
             'material_composition' => $this->faker->words(3, true),
+            'is_provider_location_based' => true,
         ]);
     }
 
@@ -85,6 +86,7 @@ class ListingFactory extends Factory
         return $this->state(fn () => [
             'listing_type' => 'package',
             'material_composition' => null,
+            'is_provider_location_based' => true,
         ]);
     }
 }

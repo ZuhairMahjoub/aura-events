@@ -74,19 +74,29 @@ class ListingController extends Controller
         ], Response::HTTP_OK);
     }
 
-    public function index(): JsonResponse
-    {
-        // Gate::authorize('viewAny', Listing::class);
+ public function index(Request $request): JsonResponse
+{
+    $request->validate([
+        'type' => 'sometimes|string|in:physical_product,service,hall,package',
+        'capacity_min' => 'sometimes|integer|min:0',
+        'capacity_max' => 'sometimes|integer|min:0',
+        'price_min' => 'sometimes|numeric|min:0',
+        'price_max' => 'sometimes|numeric|min:0',
+    ]);
 
-        $listings = $this->listingService->getAllListings();
+    $listings = $this->listingService->getAllListings(
+        type: $request->query('type'),
+        capacityMin: $request->query('capacity_min'),
+        capacityMax: $request->query('capacity_max'),
+        priceMin: $request->query('price_min'),
+        priceMax: $request->query('price_max'),
+    );
 
-        // إضافة 'success' => true كبيانات إضافية مع الـ Resource
-        return ListingResource::collection($listings)
-            ->additional(['success' => true])
-            ->response()
-            ->setStatusCode(Response::HTTP_OK);
-    }
-
+    return ListingResource::collection($listings)
+        ->additional(['success' => true])
+        ->response()
+        ->setStatusCode(Response::HTTP_OK);
+}
 
     public function store(StoreListingRequest $request): JsonResponse
     {

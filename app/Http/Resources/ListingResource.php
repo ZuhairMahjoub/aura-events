@@ -24,34 +24,39 @@ class ListingResource extends JsonResource
             'rejection_reason'           => $this->rejection_reason,
 
             'category' => $this->relationLoaded('category') && $this->category
-                ? ['id' => $this->category->id, 'name' => $this->category->name]
+                ? [
+                    'id'   => $this->category->id,
+                   'name' => $this->category->name ?? null                  ]
                 : null,
 
             'district' => $this->relationLoaded('district') && $this->district
-                ? ['id' => $this->district->id, 'name' => $this->district->name]
+                ? [
+                    'id'   => $this->district->id, 
+                    'name' => $this->district->name ?? null
+                  ]
                 : null,
 
             'provider' => $this->relationLoaded('provider') && $this->provider
                 ? [
-                    'id'            => $this->provider->id,
-                    'type'          => $this->provider->provider_type, // 'company' أو 'freelancer'
-                    'name'          => $this->provider->provider_type === 'company'
-                        ? ($this->provider->brand_name ?? trim($this->provider->user->first_name . ' ' . $this->provider->user->last_name))
-                        : trim($this->provider->user->first_name . ' ' . $this->provider->user->last_name),
-                    'email'         => $this->provider->user->email,
-                    'is_verified'   => (bool) $this->provider->is_verified,
+                    'id'          => $this->provider->id,
+                    'type'        => $this->provider->provider_type,
+                    'name'        => $this->provider->provider_type === 'company'
+                        ? ($this->provider->brand_name ?? trim(($this->provider->user->first_name ?? '') . ' ' . ($this->provider->user->last_name ?? '')))
+                        : trim(($this->provider->user->first_name ?? '') . ' ' . ($this->provider->user->last_name ?? '')),
+                    'email'       => $this->provider->user->email ?? null,
+                    'is_verified' => (bool) $this->provider->is_verified,
                 ]
                 : null,
             'images' => $this->relationLoaded('images')
                 ? $this->images->map(fn($img) => [
                     'id'  => $img->id,
-                    'url' => $img->full_url,
-                    'alt' => $img->alt_text,
+                    'url' => $img->full_url ?? null,
+                    'alt' => $img->alt_text ?? null,
                 ])
                 : [],
 
             'variants' => $this->relationLoaded('variants')
-                ? $this->variants->map(fn($variant) => [
+                ? $this->filterVariantsByCapacity($this->variants, $request)->map(fn($variant) => [
                     'id'         => $variant->id,
                     'name'       => $variant->variant_name,
                     'price'      => (float) $variant->price,
@@ -63,8 +68,8 @@ class ListingResource extends JsonResource
                     'images' => $variant->relationLoaded('images')
                         ? $variant->images->map(fn($img) => [
                             'id'  => $img->id,
-                            'url' => $img->full_url,
-                            'alt' => $img->alt_text,
+                            'url' => $img->full_url ?? null,
+                            'alt' => $img->alt_text ?? null,
                         ])
                         : [],
 
@@ -108,8 +113,8 @@ class ListingResource extends JsonResource
                             'freelancer' => $pf->relationLoaded('freelancer') && $pf->freelancer
                                 ? [
                                     'id'    => $pf->freelancer->id,
-                                    'name'  => trim($pf->freelancer->user->first_name . ' ' . $pf->freelancer->user->last_name),
-                                    'email' => $pf->freelancer->user->email,
+                                    'name'  => trim(($pf->freelancer->user->first_name ?? '') . ' ' . ($pf->freelancer->user->last_name ?? '')),
+                                    'email' => $pf->freelancer->user->email ?? null,
                                 ]
                                 : null,
                         ])
@@ -120,5 +125,33 @@ class ListingResource extends JsonResource
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
+    }
+
+    private function filterVariantsByCapacity(\Illuminate\Support\Collection $variants, Request $request): \Illuminate\Support\Collection
+    {
+        $min = $request->input('capacity_min');
+        $max = $request->input('capacity_max');
+
+        if ($min === null && $max === null) {
+            return $variants;
+        }
+
+        return $variants->filter(function ($variant) use ($min, $max) {
+            $capacity = $variant->dynamic_attributes['capacity'] ?? null;
+
+            if ($capacity === null) {
+                return false;
+            }
+
+            if ($min !== null && $capacity < (int) $min) {
+                return false;
+            }
+
+            if ($max !== null && $capacity > (int) $max) {
+                return false;
+            }
+
+            return true;
+        })->values();
     }
 }
