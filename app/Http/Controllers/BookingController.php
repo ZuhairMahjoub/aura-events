@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Gate;
 use App\Http\Resources\BookingResource;
 use Illuminate\Support\Facades\DB;
 use App\Services\FirebaseNotificationService;
+use App\Http\Resources\BookResource;
+ 
 
 
 class BookingController extends Controller
@@ -148,7 +150,7 @@ class BookingController extends Controller
                     'success' => true,
                     'message' => 'تم استرجاع حجوزات مزود الخدمة بنجاح.'
                 ],
-                BookingResource::collection($bookings)->response()->getData(true)
+                BookResource::collection($bookings)->response()->getData(true)
             )
         );
     }
