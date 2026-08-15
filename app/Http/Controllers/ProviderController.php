@@ -132,9 +132,16 @@ class ProviderController extends Controller
         'data' => $providers
     ], 200);
 }
-public function getProviders()
+public function getProviders(\Illuminate\Http\Request $request)
 {
-    $providers = Provider::paginate(15);
+    $query = Provider::query();
+
+    // فلترة حسب الاسم إذا تم إرساله في الطلب
+   if ($request->filled('name')) {
+    $query->where('brand_name', 'like', $request->name . '%');
+}
+
+    $providers = $query->paginate(15);
 
     $providers->getCollection()->transform(function ($provider) {
         return [
