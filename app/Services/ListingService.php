@@ -14,27 +14,52 @@ class ListingService
         private readonly UpdateListingAction $updateListingAction
     ) {}
 
-   public function getAllListings(int $perPage = 15): LengthAwarePaginator
-    {
-        return Listing::with([
-            'category:id,name', // تم التعديل هنا
-            'provider:id,user_id',
-            'district:id,name', // وتم التعديل هنا أيضاً إذا كان جدول المناطق يحتوي على name فقط
-            'images:id,imageable_id,imageable_type,path',
-            'variants' => fn ($q) => $q->select('id', 'listing_id', 'variant_name', 'price', 'currency', 'price_type', 'stock_quantity'),
-            'variants.images:id,imageable_id,imageable_type,path',
-            'variants.availabilities' => fn ($q) => $q
-                ->select('id', 'listing_variant_id', 'available_date', 'is_blocked')
-                ->where('available_date', '>=', now()->toDateString())
-                ->orderBy('available_date')
-                ->limit(7),
-            'variants.availabilities.slots' => fn ($q) => $q
-                ->select('id', 'listing_availability_id', 'slot_name', 'start_time', 'end_time', 'remaining_capacity'),
-        ])
-            ->latest()
-            ->paginate($perPage);
-    }
+  public function getAllListings(
+    ?string $type = null,
+    ?int $capacityMin = null,
+    ?int $capacityMax = null,
+    ?float $priceMin = null,
+    ?float $priceMax = null,
+    int $perPage = 15,
+): LengthAwarePaginator
+{
+    return Listing::with([
+        'category:id,name',
+        'provider:id,user_id',
+        'district:id,name',
+        'images:id,imageable_id,imageable_type,path',
+        'variants' => fn ($q) => $q->select('id', 'listing_id', 'variant_name', 'price', 'currency', 'price_type', 'stock_quantity', 'dynamic_attributes'),
+        'variants.images:id,imageable_id,imageable_type,path',
+        'variants.availabilities' => fn ($q) => $q
+            ->select('id', 'listing_variant_id', 'available_date', 'is_blocked')
+            ->where('available_date', '>=', now()->toDateString())
+            ->orderBy('available_date')
+            ->limit(7),
+        'variants.availabilities.slots' => fn ($q) => $q
+            ->select('id', 'listing_availability_id', 'slot_name', 'start_time', 'end_time', 'remaining_capacity'),
+    ])
+    ->when($type, fn ($q) => $q->where('listing_type', $type))
+    
+    // فلتر السعة (Capacity)
+    ->when($capacityMin || $capacityMax, function ($q) use ($capacityMin, $capacityMax) {
+        $q->whereHas('variants', function ($variantQuery) use ($capacityMin, $capacityMax) {
+            $variantQuery
+                ->when($capacityMin, fn ($vq) => $vq->where('dynamic_attributes->capacity', '>=', $capacityMin))
+                ->when($capacityMax, fn ($vq) => $vq->where('dynamic_attributes->capacity', '<=', $capacityMax));
+        });
+    })
 
+    // فلتر السعر (Price) المستقل تماماً
+    ->when($priceMin || $priceMax, function ($q) use ($priceMin, $priceMax) {
+        $q->whereHas('variants', function ($variantQuery) use ($priceMin, $priceMax) {
+            $variantQuery
+                ->when($priceMin, fn ($vq) => $vq->where('price', '>=', $priceMin))
+                ->when($priceMax, fn ($vq) => $vq->where('price', '<=', $priceMax));
+        });
+    })
+    ->latest()
+    ->paginate($perPage);
+}
     public function getListingById(string $id): Listing
     {
         return Listing::with([
