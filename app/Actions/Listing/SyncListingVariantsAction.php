@@ -35,10 +35,8 @@ class SyncListingVariantsAction
             // إدارة صور الـ Variant بنفس منطق الـ Listing:
             // - images غير موجودة → لا تمس الصور
             // - images: []         → احذف كل الصور
-            // - images: [...]      → sync
-            if (array_key_exists('images', $variantData)) {
-                $images = $variantData['images'] ?? [];
-
+            if (isset($variantData['images']) && is_array($variantData['images'])) {
+                $images = $variantData['images'];
                 $keepIds = collect($images)
                     ->filter(fn($img) => is_array($img) && !empty($img['id']))
                     ->pluck('id')

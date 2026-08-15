@@ -58,7 +58,8 @@ class ListingController extends Controller
                 'variants.packageFreelancers.freelancer',
                 'images',
                 'category',
-                'district'
+                'district',
+                'variants.images'
             ])
             ->get();
 
@@ -154,17 +155,19 @@ class ListingController extends Controller
         }
     }
 
-   public function show(string $id, Request $request)
+    public function show(string $id, Request $request)
     {
         $listing = Listing::with([
-            'images', 
+            'images',
             'variants.packageItems.includedVariant.listing',
             'variants.packageFreelancers.freelancer',
             'category',
-            'district'
+            'district',
+            'variants.images',
+            'variants.availabilities.slots'
         ])->findOrFail($id);
 
-     
+
         return response()->json([
             'status' => 'success',
             'data' => $listing
@@ -190,8 +193,7 @@ class ListingController extends Controller
             // 2. تصفية النتائج بناءً على معرف الشركة ونوع الـ listing ليجلب المنتجات المادية فقط
             $products = Listing::where('provider_id', $provider->id)
                 ->where('listing_type', 'physical_product')
-                ->with(['images', 'category', 'district', 'variants']) // شحن العلاقات المسبق للأداء المنظم
-                ->latest()
+                ->with(['images', 'category', 'district', 'variants.images', 'variants.availabilities.slots'])->latest()
                 ->paginate($request->query('per_page', 15));
 
             // 3. إرجاع البيانات منسقة عبر الـ Resource مع الـ Pagination Meta
@@ -238,8 +240,7 @@ class ListingController extends Controller
             // فحص نوع الـ listing_type ليكون 'service' فقط وتصفية النتائج حسب الشركة
             $services = Listing::where('provider_id', $provider->id)
                 ->where('listing_type', 'service')
-                ->with(['images', 'category', 'district', 'variants']) // تحميل العلاقات المعتمدة للخدمات
-                ->latest()
+                ->with(['images', 'category', 'district', 'variants.images', 'variants.availabilities.slots'])->latest()
                 ->paginate($request->query('per_page', 15));
 
             return response()->json([
@@ -387,6 +388,7 @@ class ListingController extends Controller
                     'variants.packageItems.includedVariant.listing',
                     'variants.packageFreelancers.freelancer',
                     'variants.availabilities.slots',
+                    'variants.images'
                 ])
                 ->paginate($request->query('per_page', 15));
 
