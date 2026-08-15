@@ -104,8 +104,8 @@ class UpdateArrangementAction
             // - images غير موجودة في الـ request  → لا تمس الصور.
             // - images: []                         → احذف كل الصور.
             // - images: [{id:...}, {path:...}]     → sync (احتفظ بالقديمة وارفع الجديدة).
-            if (array_key_exists('images', $data)) {
-                $images = $data['images'] ?? [];
+             if (isset($data['images']) && is_array($data['images'])) {
+                $images = $data['images'];
 
                 $keepIds = collect($images)
                     ->filter(fn ($img) => is_array($img) && !empty($img['id']))

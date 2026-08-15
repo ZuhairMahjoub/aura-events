@@ -36,6 +36,7 @@ use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\FreelancerDetailController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\AdminBookingController;
+use App\Http\Controllers\CompanyBlockedDateController;
 
 Route::middleware(['set_locale'])->group(function () {
 
@@ -131,7 +132,7 @@ Route::middleware(['set_locale'])->group(function () {
             Route::get('/provider/available-freelancers', [ArrangementController::class, 'getFreelancersList']);
             Route::get('/job-offers', [JobOfferController::class, 'index']);
         });
-        
+
         Route::get('/my-applied-jobs', [JobOfferController::class, 'getAppliedJobs']);
     });
 
@@ -251,4 +252,10 @@ Route::middleware(['set_locale'])->group(function () {
     Route::middleware(['auth:sanctum', 'role:provider'])->group(function () {
         Route::post('/provider/upload-qr', [ProviderController::class, 'uploadQrCode']);
     });
+});
+Route::middleware(['auth:sanctum', 'provider_type:company'])->group(function () {
+
+    Route::get('/company/blocked-dates', [CompanyBlockedDateController::class, 'index']);
+    Route::post('/company/blocked-dates', [CompanyBlockedDateController::class, 'store']);
+    Route::delete('/company/blocked-dates/{id}', [CompanyBlockedDateController::class, 'destroy']);
 });

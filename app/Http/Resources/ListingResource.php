@@ -47,7 +47,6 @@ class ListingResource extends JsonResource
                     'is_verified' => (bool) $this->provider->is_verified,
                 ]
                 : null,
-
             'images' => $this->relationLoaded('images')
                 ? $this->images->map(fn($img) => [
                     'id'  => $img->id,
@@ -65,8 +64,7 @@ class ListingResource extends JsonResource
                     'price_type' => $variant->price_type,
                     'stock'      => $variant->stock_quantity,
                     'attributes' => $variant->dynamic_attributes,
-                    'capacity'   => $variant->dynamic_attributes['capacity'] ?? null,
-
+                    'capacity'   => $variant->capacity,
                     'images' => $variant->relationLoaded('images')
                         ? $variant->images->map(fn($img) => [
                             'id'  => $img->id,

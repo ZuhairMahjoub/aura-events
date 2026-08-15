@@ -154,7 +154,7 @@ class BookingController extends Controller
     }
     public function show(string $id): JsonResponse
     {
-        $booking = \App\Models\Booking::findOrFail($id);
+        $booking = \App\Models\Booking::with(['user', 'listing', 'variant', 'slot'])->findOrFail($id);
         Gate::authorize('view', $booking); // يجب أن تسمح الـ Policy للمنظم والمزود الخاص بالحجز برؤيته
 
         return response()->json([
@@ -210,4 +210,3 @@ class BookingController extends Controller
     ]);
 }
 }
-
