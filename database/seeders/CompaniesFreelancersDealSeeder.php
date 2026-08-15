@@ -243,11 +243,11 @@ class CompaniesFreelancersDealSeeder extends Seeder
             'listing_id' => $listing->id,
             'variant_name' => ['ar' => 'الباقة الأساسية', 'en' => 'Basic Package'],
             'price' => match ($type) {
-                'hall' => 1500000,
-                'package' => 800000,
-                'physical_product' => 50000,
-                default => 200000,
-            },
+    'hall' => rand(1000000, 3000000), // سعر عشوائي للصالة بين مليون و 3 مليون
+    'package' => rand(500000, 1500000),
+    'physical_product' => rand(3000, 25000),
+    default => rand(100000, 500000),
+},
             'currency' => 'SYP',
             'price_type' => $type === 'service' ? 'hourly' : 'fixed',
             'stock_quantity' => $type === 'physical_product' ? 25 : null,

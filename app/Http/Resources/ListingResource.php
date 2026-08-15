@@ -24,30 +24,35 @@ class ListingResource extends JsonResource
             'rejection_reason'           => $this->rejection_reason,
 
             'category' => $this->relationLoaded('category') && $this->category
-                ? ['id' => $this->category->id, 'name' => $this->category->name]
+                ? [
+                    'id'   => $this->category->id,
+                   'name' => $this->category->name ?? null                  ]
                 : null,
 
             'district' => $this->relationLoaded('district') && $this->district
-                ? ['id' => $this->district->id, 'name' => $this->district->name]
+                ? [
+                    'id'   => $this->district->id, 
+                    'name' => $this->district->name ?? null
+                  ]
                 : null,
 
             'provider' => $this->relationLoaded('provider') && $this->provider
                 ? [
-                    'id'            => $this->provider->id,
-                    'type'          => $this->provider->provider_type, // 'company' أو 'freelancer'
-                    'name'          => $this->provider->provider_type === 'company'
-                        ? ($this->provider->brand_name ?? trim($this->provider->user->first_name . ' ' . $this->provider->user->last_name))
-                        : trim($this->provider->user->first_name . ' ' . $this->provider->user->last_name),
-                    'email'         => $this->provider->user->email,
-                    'is_verified'   => (bool) $this->provider->is_verified,
+                    'id'          => $this->provider->id,
+                    'type'        => $this->provider->provider_type,
+                    'name'        => $this->provider->provider_type === 'company'
+                        ? ($this->provider->brand_name ?? trim(($this->provider->user->first_name ?? '') . ' ' . ($this->provider->user->last_name ?? '')))
+                        : trim(($this->provider->user->first_name ?? '') . ' ' . ($this->provider->user->last_name ?? '')),
+                    'email'       => $this->provider->user->email ?? null,
+                    'is_verified' => (bool) $this->provider->is_verified,
                 ]
                 : null,
 
             'images' => $this->relationLoaded('images')
                 ? $this->images->map(fn($img) => [
                     'id'  => $img->id,
-                    'url' => $img->full_url,
-                    'alt' => $img->alt_text,
+                    'url' => $img->full_url ?? null,
+                    'alt' => $img->alt_text ?? null,
                 ])
                 : [],
 
@@ -60,20 +65,13 @@ class ListingResource extends JsonResource
                     'price_type' => $variant->price_type,
                     'stock'      => $variant->stock_quantity,
                     'attributes' => $variant->dynamic_attributes,
-                    // capacity مش عمود مستقل بجدول listing_variants — القيمة
-                    // محفوظة جوا JSON column اسمه dynamic_attributes، فلازم
-                    // نقرأها من هناك بدل $variant->capacity (اللي كان دايماً
-                    // بيرجع null لأنو العمود أصلاً مش موجود).
-                    // ⚠️ هالسطر رجع لنسخته القديمة ($variant->capacity) بعد
-                    // git pull سابق — لو رجعت capacity تطلع null، هون أول
-                    // مكان تتأكد منه.
                     'capacity'   => $variant->dynamic_attributes['capacity'] ?? null,
 
                     'images' => $variant->relationLoaded('images')
                         ? $variant->images->map(fn($img) => [
                             'id'  => $img->id,
-                            'url' => $img->full_url,
-                            'alt' => $img->alt_text,
+                            'url' => $img->full_url ?? null,
+                            'alt' => $img->alt_text ?? null,
                         ])
                         : [],
 
@@ -117,8 +115,8 @@ class ListingResource extends JsonResource
                             'freelancer' => $pf->relationLoaded('freelancer') && $pf->freelancer
                                 ? [
                                     'id'    => $pf->freelancer->id,
-                                    'name'  => trim($pf->freelancer->user->first_name . ' ' . $pf->freelancer->user->last_name),
-                                    'email' => $pf->freelancer->user->email,
+                                    'name'  => trim(($pf->freelancer->user->first_name ?? '') . ' ' . ($pf->freelancer->user->last_name ?? '')),
+                                    'email' => $pf->freelancer->user->email ?? null,
                                 ]
                                 : null,
                         ])
@@ -131,13 +129,6 @@ class ListingResource extends JsonResource
         ];
     }
 
-    /**
-     * لو الطلب فيه capacity_min و/أو capacity_max، منستبعد الـ variants
-     * اللي ما بتحقق الشرط بدل ما نرجّع كل variants الـ listing.
-     *
-     * ملاحظة: بتقرا capacity_min/max من input() (مش query() بس) عشان
-     * تشتغل سواء انبعتوا بالـ URL query string أو بالـ body.
-     */
     private function filterVariantsByCapacity(\Illuminate\Support\Collection $variants, Request $request): \Illuminate\Support\Collection
     {
         $min = $request->input('capacity_min');
