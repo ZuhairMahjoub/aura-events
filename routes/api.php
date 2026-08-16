@@ -37,6 +37,7 @@ use App\Http\Controllers\FreelancerDetailController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\AdminBookingController;
 use App\Http\Controllers\CompanyBlockedDateController;
+use App\Http\Controllers\AdminJobOfferController;
 
 Route::middleware(['set_locale'])->group(function () {
 
@@ -165,6 +166,9 @@ Route::middleware(['set_locale'])->group(function () {
         Route::get('/listings/{id}', [AdminListingController::class, 'show']);
         Route::get('/listings/pending', [AdminListingController::class, 'pendingList']);
         Route::get('/bookings/{id}', [AdminBookingController::class, 'show']);
+        Route::get('/job-offers/pending', [AdminJobOfferController::class, 'pendingList']);
+        Route::put('/job-offers/{id}/approve', [AdminJobOfferController::class, 'approve']);
+        Route::put('/job-offers/{id}/reject', [AdminJobOfferController::class, 'reject']);
     });
 
     Route::middleware('auth:sanctum')->group(function () {

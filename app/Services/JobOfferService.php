@@ -13,8 +13,11 @@ class JobOfferService
      */
     public function createJobOffer(array $data, string $companyId): JobOffer
     {
+        unset($data['moderation_status'], $data['rejection_reason']);
+
         return JobOffer::create(array_merge($data, [
-            'company_id' => $companyId
+            'company_id'         => $companyId,
+            'moderation_status'  => 'pending',
         ]));
     }
     /**
@@ -43,14 +46,14 @@ class JobOfferService
     {
         return JobOffer::where('company_id', $companyId)
             ->with([
-                'service:id,name,description', 
+                'service:id,name,description',
                 // 💡 التعديل هنا: فلترة الطلبات لتجلب فقط التي حالتهم pending
                 'applications' => function ($query) {
                     $query->where('status', 'pending');
                 },
-                'applications.freelancer.user',             
-                'applications.freelancer.freelancerDetails',  
-                'applications.freelancer.categories'       
+                'applications.freelancer.user',
+                'applications.freelancer.freelancerDetails',
+                'applications.freelancer.categories'
             ])
             ->orderBy('created_at', 'desc')
             ->get();
@@ -78,7 +81,7 @@ class JobOfferService
         $jobOffer = JobOffer::findOrFail($jobOfferId);
 
         // لا يمكن التقديم إذا الشركة عطّلت العرض
-        if (!$jobOffer->is_active) {
+        if (!$jobOffer->is_active || $jobOffer->moderation_status !== 'approved') {
             return null;
         }
 
@@ -99,13 +102,13 @@ class JobOfferService
         ]);
     }
     public function getAllJobOffers()
-{
-    return \App\Models\JobOffer::with('provider:id,brand_name')
-        // جلب الوظائف المفعّلة فقط
-        ->where('is_active', true)
-        ->latest()
-        ->paginate(15);
-}
+    {
+        return \App\Models\JobOffer::with('provider:id,brand_name')
+            ->where('is_active', true)
+            ->where('moderation_status', 'approved')
+            ->latest()
+            ->paginate(15);
+    }
 
     /**
      * تفعيل / تعطيل عرض العمل من قبل الشركة صاحبته
@@ -117,6 +120,37 @@ class JobOfferService
             ->firstOrFail();
 
         $jobOffer->update(['is_active' => !$jobOffer->is_active]);
+
+        return $jobOffer;
+    }
+    public function getPendingJobOffers(int $perPage = 15)
+    {
+        return JobOffer::with('provider:id,brand_name')
+            ->where('moderation_status', 'pending')
+            ->oldest()
+            ->paginate($perPage);
+    }
+
+    public function approveJobOffer(string $jobOfferId): JobOffer
+    {
+        $jobOffer = JobOffer::findOrFail($jobOfferId);
+
+        $jobOffer->update([
+            'moderation_status' => 'approved',
+            'rejection_reason'  => null,
+        ]);
+
+        return $jobOffer;
+    }
+
+    public function rejectJobOffer(string $jobOfferId, ?string $reason = null): JobOffer
+    {
+        $jobOffer = JobOffer::findOrFail($jobOfferId);
+
+        $jobOffer->update([
+            'moderation_status' => 'rejected',
+            'rejection_reason'  => $reason,
+        ]);
 
         return $jobOffer;
     }

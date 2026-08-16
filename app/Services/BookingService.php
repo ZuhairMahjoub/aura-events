@@ -86,6 +86,7 @@ class BookingService
                 'booked_end_time'     => $timeSnapshot['booked_end_time'],
                 'metadata'            => $mergedMetadata,
                 'customer_notes'      => $data->customerNotes,
+                'pending_expires_at'  => now()->addHours(config('booking.pending_timeout_hours')),
             ]);
 
             $this->logTransition($booking, null, 'pending', 'organizer', $data->userId);
@@ -107,6 +108,63 @@ class BookingService
         });
     }
 
+    /**
+     * ينفّذ عبر Scheduled Command (bookings:expire-stale) — يمر على كل
+     * الحجوزات pending اللي تجاوزت مهلتها (pending_expires_at < now())
+     * ويحوّلها لـ 'expired' + يرجّع السعة/التاريخ المحجوزين، بنفس آلية
+     * cancel() تماماً (إعادة استخدام releaseCapacity/logTransition بدل
+     * تكرار المنطق).
+     *
+     * @return int عدد الحجوزات اللي انتهت مهلتها بهالتشغيلة
+     */
+    public function expireStalePendingBookings(): int
+    {
+        $staleBookingIds = Booking::where('status', 'pending')
+            ->whereNotNull('pending_expires_at')
+            ->where('pending_expires_at', '<', now())
+            ->pluck('id');
+
+        $expiredCount = 0;
+
+        foreach ($staleBookingIds as $bookingId) {
+            DB::transaction(function () use ($bookingId, &$expiredCount) {
+                $booking = Booking::lockForUpdate()->find($bookingId);
+
+                // إعادة الفحص جوا القفل: ممكن حالته تغيّرت (المزوّد رد
+                // بالضبط قبل ما توصل هالتشغيلة) بين الـ pluck() فوق واللحظة
+                // هاي - فما لازم نلغيها بالغلط.
+                if (! $booking || $booking->status !== 'pending') {
+                    return;
+                }
+
+                $previousStatus = $booking->status;
+
+                $this->releaseCapacity($booking);
+                $this->releaseFreelancerDateIfApplicable($booking);
+
+                $paymentStatusUpdate = $booking->payment_status === 'paid'
+                    ? ['payment_status' => 'refund_pending']
+                    : [];
+
+                $booking->update([
+                    'status'              => 'expired',
+                    'cancelled_at'        => now(),
+                    'cancelled_by'        => 'system',
+                    'cancellation_reason' => 'انتهت مهلة الرد من المزوّد (' . config('booking.pending_timeout_hours') . ' ساعة) دون قبول أو رفض.',
+                    ...$paymentStatusUpdate,
+                ]);
+
+                $this->logTransition($booking, $previousStatus, 'expired', 'system', null, 'انتهاء المهلة تلقائياً');
+
+                DB::afterCommit(fn () => event(new \App\Events\BookingExpired($booking)));
+
+                $expiredCount++;
+            });
+        }
+
+        return $expiredCount;
+    }
+
     public function cancel(string $bookingId, string $cancelledBy, ?string $reason = null): Booking
     {
         if (! in_array($cancelledBy, self::VALID_CANCELLERS, true)) {
@@ -122,11 +180,22 @@ class BookingService
             $this->releaseCapacity($booking);
             $this->releaseFreelancerDateIfApplicable($booking);
 
+            // إصلاح ثغرة "دفع بدون استرجاع": لو الحجز كان مدفوع فعلياً
+            // وقت الإلغاء، ما نسيبش payment_status عالة 'paid' وكأنه ولا
+            // شي صار - نحوّلها 'refund_pending' عشان يصير فيه أثر واضح
+            // بقاعدة البيانات إنه في مبلغ مستحق استرجاعه (حتى لو الاسترجاع
+            // الفعلي عبر بوابة الدفع بيصير يدوياً حالياً لحد ما يتكامل
+            // Payment Gateway حقيقي).
+            $paymentStatusUpdate = $booking->payment_status === 'paid'
+                ? ['payment_status' => 'refund_pending']
+                : [];
+
             $booking->update([
                 'status'               => 'cancelled',
                 'cancelled_at'         => now(),
                 'cancelled_by'         => $cancelledBy,
                 'cancellation_reason'  => $reason,
+                ...$paymentStatusUpdate,
             ]);
 
             $this->logTransition($booking, $previousStatus, 'cancelled', $cancelledBy, null, $reason);
@@ -260,7 +329,7 @@ class BookingService
             }
 
             $previousStatus = $booking->status;
-            $booking->update(['status' => 'accepted']);
+            $booking->update(['status' => 'accepted', 'pending_expires_at' => null]);
 
             $this->logTransition($booking, $previousStatus, 'accepted', 'provider', null);
 

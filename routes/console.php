@@ -9,3 +9,4 @@ Artisan::command('inspire', function () {
 use Illuminate\Support\Facades\Schedule;
 
 Schedule::command('auth:clean-unverified')->everyMinute();
+Schedule::command('bookings:expire-stale')->everyFiveMinutes();
