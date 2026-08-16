@@ -10,14 +10,6 @@ use Illuminate\Support\Facades\Log;
 
 class ProviderController extends Controller
 {
-    public function show($id)
-{
-    $provider = Provider::with('user')->findOrFail($id);
-    return response()->json([
-        'success' => true,
-        'data' => $provider
-    ], 200);
-}
  public function profile(Request $request): JsonResponse
 {
     try {
@@ -127,6 +119,119 @@ class ProviderController extends Controller
     }
 }
     /**
+     * تحديث بروفايل المزوّد (شركة أو فريلانسر) عبر 3 جداول دفعة واحدة:
+     * users (اسم/إعدادات) + providers (brand_name) + company_details أو
+     * freelancer_details حسب النوع. كل شي جوا transaction واحدة حتى لا
+     * ينحدّث جدول وينفشل تاني بمنتصف الطريق.
+     */
+    public function update(\App\Http\Requests\UpdateProviderProfileRequest $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'يجب تسجيل الدخول أولاً.'
+                ], 401);
+            }
+
+            if (!$user->hasRole('provider')) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'غير مصرح. هذه الخدمة للمزودين فقط.'
+                ], 403);
+            }
+
+            $provider = $user->providerProfile;
+
+            if (!$provider) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'لم يتم إكمال بيانات البروفايل بعد.'
+                ], 404);
+            }
+
+            $validated = $request->validated();
+
+            \Illuminate\Support\Facades\DB::transaction(function () use ($user, $provider, $validated) {
+                // 1) users: بدون city_id — العمود غير موجود فعلياً بجدول
+                // users رغم وجوده بـ User::$fillable (راجع ملاحظة profile()).
+                $userData = collect($validated)
+                    ->only(['first_name', 'last_name', 'phone', 'email', 'settings_language', 'settings_theme'])
+                    ->toArray();
+
+                if (!empty($userData)) {
+                    // لو تغيّر phone أو email فعلياً عن القيمة القديمة، لازم
+                    // نصفّر توثيقه — التوثيق القديم كان لرقم/إيميل مختلف،
+                    // فبقاؤه verified بعد التغيير مضلّل وغير آمن.
+                    if (array_key_exists('phone', $userData) && $userData['phone'] !== $user->phone) {
+                        $userData['phone_verified_at'] = null;
+                    }
+                    if (array_key_exists('email', $userData) && $userData['email'] !== $user->email) {
+                        $userData['email_verified_at'] = null;
+                    }
+
+                    $user->update($userData);
+                }
+
+                // 2) providers: brand_name فقط قابل للتعديل هون
+                $providerData = collect($validated)->only(['brand_name'])->toArray();
+
+                if (!empty($providerData)) {
+                    $provider->update($providerData);
+                }
+
+                // 3) تفاصيل خاصة بالنوع
+                if ($provider->provider_type === 'company') {
+                    $companyData = collect($validated)
+                        ->only(['tax_number', 'registration_no', 'district_id', 'address_details'])
+                        ->toArray();
+
+                    if (!empty($companyData)) {
+                        // updateOrCreate: بعض الشركات القديمة ممكن ماعندهاش
+                        // سجل company_details أصلاً بعد (تسجيل ناقص).
+                        $provider->companyDetails()->updateOrCreate(
+                            ['provider_id' => $provider->id],
+                            $companyData
+                        );
+                    }
+                } elseif ($provider->provider_type === 'freelancer') {
+                    $freelancerData = collect($validated)
+                        ->only(['national_id', 'experience_years'])
+                        ->toArray();
+
+                    if (!empty($freelancerData)) {
+                        $provider->freelancerDetails()->updateOrCreate(
+                            ['provider_id' => $provider->id],
+                            $freelancerData
+                        );
+                    }
+                }
+
+                // 4) التصنيفات: sync كامل — القائمة المرسلة تحل محل الحالية
+                // بالكامل (مو إضافة تراكمية)، مشترك بين النوعين.
+                if (array_key_exists('category_ids', $validated)) {
+                    $provider->categories()->sync($validated['category_ids']);
+                }
+            });
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'تم تحديث البروفايل بنجاح.',
+                'data'    => $this->profile($request)->getData(true)['data'],
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error("Update Provider Profile Error: " . $e->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'حدث خطأ أثناء تحديث البيانات، يرجى المحاولة لاحقاً.'
+            ], 500);
+        }
+    }
+
+    /**
      * Display a listing of the resource.
      */
     public function index()
@@ -140,16 +245,9 @@ class ProviderController extends Controller
         'data' => $providers
     ], 200);
 }
-public function getProviders(\Illuminate\Http\Request $request)
+public function getProviders()
 {
-    $query = Provider::query();
-
-    // فلترة حسب الاسم إذا تم إرساله في الطلب
-   if ($request->filled('name')) {
-    $query->where('brand_name', 'like', $request->name . '%');
-}
-
-    $providers = $query->paginate(15);
+    $providers = Provider::paginate(15);
 
     $providers->getCollection()->transform(function ($provider) {
         return [

@@ -33,11 +33,15 @@ class Booking extends Model
         'cancelled_at',
         'cancellation_reason',
         'cancelled_by',
+        'pending_expires_at',
+        'completed_at',
     ];
 
     // إذا كنت تستخدم JSON في metadata، يفضل إضافة هذا الكاست
     protected $casts = [
         'metadata' => 'array',
+        'pending_expires_at' => 'datetime',
+        'completed_at' => 'datetime',
     ];
 
     // الـ Relationships
@@ -75,8 +79,8 @@ class Booking extends Model
         return $this->hasMany(Review::class);
     }
 
-    public function payments() {
-    return $this->hasMany(Payment::class);
-}
-
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
+    }
 }
