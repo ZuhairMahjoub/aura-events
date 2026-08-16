@@ -281,6 +281,7 @@ class ArrangementController extends Controller
                     'district',
                     'variants.packageItems.includedVariant.images',
                     'variants.packageItems.includedVariant.listing',
+                    'variants.packageItems.includedVariant.listing.images',
                     'variants.packageFreelancers.freelancer',
                     'variants.availabilities.slots'
                 ])

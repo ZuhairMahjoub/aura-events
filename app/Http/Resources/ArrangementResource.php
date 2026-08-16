@@ -58,11 +58,23 @@ class ArrangementResource extends JsonResource
                 return $variant->packageitems
                     ->map(function ($item) {
                         // سحب صورة النسخة (اللون) مباشرة عبر الـ accessor full_url
+                        $incVar = $item->includedVariant ?? $item->includedvariant;
                         $variantimageurl = null;
-                        if ($item->includedvariant && $item->includedvariant->relationloaded('images') && $item->includedvariant->images->isnotempty()) {
-                            $variantimageurl = $item->includedvariant->images->first()->full_url;
+                        
+                        if ($incVar) {
+                            // 1. البحث بقوة في صور النسخة (اللون)
+                            if ($incVar->images && $incVar->images->isNotEmpty()) {
+                                $img = $incVar->images->first();
+                                // التقاط الرابط أياً كان اسمه في قاعدة البيانات
+                                $variantimageurl = $img->full_url ?? $img->original_url ?? $img->url ?? $img->path;
+                            } 
+                            // 2. إذا لم يجدها، يبحث بقوة في صور المنتج الأساسي كبديل
+                            elseif ($incVar->listing && $incVar->listing->images && $incVar->listing->images->isNotEmpty()) {
+                                $img = $incVar->listing->images->first();
+                                // التقاط الرابط أياً كان اسمه
+                                $variantimageurl = $img->full_url ?? $img->original_url ?? $img->url ?? $img->path;
+                            }
                         }
-
                         return [
                             'id'         => $item->id,
                             'quantity'   => $item->quantity,

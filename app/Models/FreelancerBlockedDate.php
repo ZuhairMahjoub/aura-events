@@ -18,6 +18,7 @@ class FreelancerBlockedDate extends Model
         'end_time',
         'source',
         'booking_id',
+        'note',
     ];
 
     protected $casts = [

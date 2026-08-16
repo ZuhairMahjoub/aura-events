@@ -14,20 +14,20 @@ class FreelancerBlockedDateController extends Controller
      * GET /freelancer/blocked-dates
      * يرجع كل تواريخ الفريلانسر الحالي (يدوي + تلقائي)
      */
-   public function index(Request $request)
-{
-    Gate::authorize('viewAny', FreelancerBlockedDate::class);
+    public function index(Request $request)
+    {
+        Gate::authorize('viewAny', FreelancerBlockedDate::class);
 
-    $freelancer = $request->user()->providerProfile;
+        $freelancer = $request->user()->providerProfile;
 
-    $dates = FreelancerBlockedDate::where('freelancer_id', $freelancer->id)
-        ->when($request->filled('source'), fn ($q) => $q->where('source', $request->input('source')))
-        ->with('booking:id,status,booking_type,total_price') // تفاصيل الحجز نفسه
-        ->orderBy('blocked_date')
-        ->get();
+        $dates = FreelancerBlockedDate::where('freelancer_id', $freelancer->id)
+            ->when($request->filled('source'), fn($q) => $q->where('source', $request->input('source')))
+            ->with('booking:id,status,booking_type,total_price') // تفاصيل الحجز نفسه
+            ->orderBy('blocked_date')
+            ->get();
 
-    return response()->json($dates);
-}
+        return response()->json($dates);
+    }
 
     /**
      * POST /freelancer/blocked-dates
@@ -42,17 +42,25 @@ class FreelancerBlockedDateController extends Controller
         $validated = $request->validate([
             'dates'   => ['required', 'array', 'min:1'],
             'dates.*' => [
-                'required', 'date',
+                'required',
+                'date',
                 Rule::unique('freelancer_blocked_dates', 'blocked_date')
                     ->where('freelancer_id', $freelancer->id),
             ],
+            'note'       => ['nullable', 'string', 'max:255'],
+            'start_time' => ['nullable', 'date_format:H:i'],
+            'end_time'   => ['nullable', 'date_format:H:i', 'after:start_time'],
         ]);
 
         $records = collect($validated['dates'])->map(function ($date) use ($freelancer) {
             return FreelancerBlockedDate::create([
                 'freelancer_id' => $freelancer->id,
                 'blocked_date'  => $date,
+                'start_time'    => $validated['start_time'] ?? null,
+                'end_time'      => $validated['end_time'] ?? null,
+                'note'          => $validated['note'] ?? null,
                 'source'        => 'manual',
+
             ]);
         });
 

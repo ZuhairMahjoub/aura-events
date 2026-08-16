@@ -255,6 +255,7 @@ Route::middleware(['set_locale'])->group(function () {
 
     Route::middleware(['auth:sanctum', 'role:provider'])->group(function () {
         Route::post('/provider/upload-qr', [ProviderController::class, 'uploadQrCode']);
+        Route::get('/provider/qr', [ProviderController::class, 'getQrCode']);
     });
 });
 Route::middleware(['auth:sanctum', 'provider_type:company'])->group(function () {

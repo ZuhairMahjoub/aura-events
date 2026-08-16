@@ -24,10 +24,9 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('freelancer_blocked_dates', function (Blueprint $table) {
-            // Re-create the unique index before dropping the non-unique one
             $table->unique(['freelancer_id', 'blocked_date']);
             $table->dropIndex(['freelancer_id', 'blocked_date']);
-            $table->dropColumn(['start_time', 'end_time']);
+             $table->dropColumn(['start_time', 'end_time', 'note']);
         });
     }
 };
