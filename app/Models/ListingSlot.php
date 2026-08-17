@@ -11,7 +11,7 @@ use Spatie\Translatable\HasTranslations;
 
 class ListingSlot extends Model
 {
-    use HasFactory, HasUlids;
+    
 
     use HasFactory, HasUlids,HasTranslations;
     public $translatable = ['slot_name'];
