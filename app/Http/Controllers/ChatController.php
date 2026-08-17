@@ -20,7 +20,7 @@ class ChatController extends Controller
     public function initializeChat(Request $request)
     {
         $validated = $request->validate([
-            'receiver_id' => 'required|exists:users,id',
+            'receiver_id' => 'required|exists:providers,id',
         ]);
 
         $sender   = $request->user();

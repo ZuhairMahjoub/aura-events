@@ -127,7 +127,7 @@ class CompaniesFreelancersDealSeeder extends Seeder
                     'slot_name'               => 'الفترة الصباحية للباقة',
                     'start_time'              => '10:00:00',
                     'end_time'                => '15:00:00',
-                    'remaining_capacity'      => 1,
+                    'remaining_capacity'      => 1000,
                 ]);
 
                 $packageSlot->setRelation('availability', $packageAvailability);
@@ -267,7 +267,7 @@ class CompaniesFreelancersDealSeeder extends Seeder
             'slot_name' => 'الفترة المسائية',
             'start_time' => '17:00:00',
             'end_time' => '23:00:00',
-            'remaining_capacity' => $type === 'physical_product' ? 25 : 1,
+            'remaining_capacity' => $type === 'physical_product' ? 25 : 1000,
         ]);
 
         $variant->setRelation('listing', $listing);

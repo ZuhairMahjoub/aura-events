@@ -27,7 +27,9 @@ class Provider extends Model
         'is_active',
         'moderation_status',
         'rejection_reason',
-        'qr_code_path'
+        'qr_code_path',
+        'wallet_balance'
+
     ];
     // في app/Models/Provider.php
     public function activeContracts()

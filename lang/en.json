@@ -18,7 +18,22 @@
     "notif_booking_completed_title": "Booking Completed ✅",
     "notif_booking_completed_body": "Booking completed successfully. Thank you!",
     "notif_booking_rejected_title": "Booking Update",
-    "notif_booking_rejected_body": "Sorry, your booking request was rejected. Reason: :reason"
+    "notif_booking_rejected_body": "Sorry, your booking request was rejected. Reason: :reason",
 
+"notif_booking_payment_due_title": "Payment Required ⏳",
+"notif_booking_payment_due_body": "Please complete payment within 3 days to avoid automatic cancellation.",
 
+"notif_booking_accepted_provider_title": "Booking Accepted",
+"notif_booking_accepted_provider_body": "You have successfully accepted this booking request.",
+
+"notif_booking_rejected_provider_title": "Booking Rejected",
+"notif_booking_rejected_provider_body": "You have rejected this booking request.",
+
+"notif_booking_confirmed_title": "Booking Confirmed ✅",
+"notif_booking_confirmed_body": "Your booking has been confirmed successfully.",
+"notif_booking_confirmed_provider_title": "Booking Confirmed",
+"notif_booking_confirmed_provider_body": "This booking has been officially confirmed.",
+
+"notif_booking_completed_provider_title": "Service Completed ✅",
+"notif_booking_completed_provider_body": "The service has been marked as completed successfully."
 }

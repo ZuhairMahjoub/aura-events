@@ -16,7 +16,7 @@ return new class extends Migration
             $table->json('slot_name')->nullable();
             $table->time('start_time');
             $table->time('end_time');
-            $table->integer('remaining_capacity')->default(1);
+            $table->integer('remaining_capacity')->default(500);
             $table->timestamps(); // لا يوجد softDeletes هنا
 
             // القيد الفريد سيعمل الآن بسلاسة بنسبة 100%

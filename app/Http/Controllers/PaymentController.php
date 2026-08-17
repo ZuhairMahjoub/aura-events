@@ -22,53 +22,57 @@ class PaymentController extends Controller
         'data' => $payments,
     ]);
 }
-    // دالة الزبون: لرفع الملف فقط
-   public function uploadProof(Request $request, BookingPaymentProcessor $processor)
+  public function uploadProof(Request $request, BookingPaymentProcessor $processor)
 {
     $request->validate([
         'booking_id' => 'required|exists:bookings,id',
         'proof_file' => 'required|file|mimes:pdf|max:2048',
+        'amount'     => 'required|numeric|min:1',
     ]);
 
-    // نستخدم التخزين الافتراضي
-    $path = $request->file('proof_file')->store('payments', 'public'); 
-    
-    // تأكد أن هذا السطر موجود ويعمل
-    $processor->storeProof($request->booking_id, $path);
+    $path = $request->file('proof_file')->store('payments', 'public');
+
+    $processor->storeProof($request->booking_id, $path, $request->input('amount'));
 
     return response()->json(['message' => 'تم استلام الملف بنجاح.']);
 }
 
-    // دالة الأدمن: تأكيد الدفع يدوياً
-    public function confirmPayment($paymentId)
-    {
-        $payment = Payment::findOrFail($paymentId);
+   public function confirmPayment($paymentId)
+{
+    $payment = Payment::with('booking.provider')->findOrFail($paymentId);
 
-        // 1. تحديث حالة الدفع إلى مكتملة
-        $payment->update(['status' => 'confirmed']);
-
-        // 2. تحديث الحجز ليكون مؤكداً
-        $payment->booking->update([
-            'status' => 'confirmed',
-            'payment_status' => 'paid'
-        ]);
-
-        return response()->json(['message' => 'تم تأكيد الدفع بنجاح.']);
+    if ($payment->status === 'completed') {
+        return response()->json([
+            'message' => 'تم تأكيد الدفع مسبقاً.',
+        ], 200);
     }
 
-    // دالة الأدمن: رفض الدفع في حال كان المبلغ غير مطابق أو الملف غير صحيح
+    \Illuminate\Support\Facades\DB::transaction(function () use ($payment) {
+        $payment->update(['status' => 'completed']);
+
+        $payment->booking->update([
+            'status'         => 'completed',
+            'payment_status' => 'paid',
+        ]);
+
+        $payment->booking->provider->increment('wallet_balance', $payment->amount);
+    });
+
+    return response()->json(['message' => 'تم تأكيد الدفع وإضافة المبلغ لمحفظة المزوّد بنجاح.']);
+}
+
     public function rejectPayment(Request $request, $paymentId)
     {
         $payment = Payment::findOrFail($paymentId);
         
         $payment->update([
             'status' => 'failed',
-            'admin_notes' => $request->notes // ملاحظاتك ليش رفضته (مثلاً: المبلغ ناقص)
+            'admin_notes' => $request->notes 
         ]);
 
         return response()->json(['message' => 'تم رفض الدفع وتنبيه المستخدم.']);
     }
-   public function viewProof(string $paymentId)
+  public function viewProof(string $paymentId)
 {
     $payment = Payment::with(['booking.provider'])->find($paymentId);
 
@@ -89,6 +93,10 @@ class PaymentController extends Controller
 
     $response->headers->set('X-Booking-Id', $payment->booking_id);
     $response->headers->set('X-Payment-Id', $payment->id);
+
+
+    $response->headers->set('X-Payment-Amount', $payment->amount);
+    $response->headers->set('X-Payment-Currency', $payment->currency);
 
     $providerName = $payment->booking?->provider?->brand_name ?? $payment->booking?->provider?->name ?? 'Unknown';
     $response->headers->set('X-Provider-Name', $providerName);
