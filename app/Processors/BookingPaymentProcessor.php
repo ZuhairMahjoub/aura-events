@@ -7,15 +7,14 @@ use App\Models\Payment;
 
 class BookingPaymentProcessor
 {
-    public function storeProof(string $bookingId, string $pdfPath)
+    public function storeProof(string $bookingId, string $pdfPath, float $amount)
     {
         $booking = Booking::findOrFail($bookingId);
 
-        // حفظ طلب الدفع بحالة pending ليظهر عندك في لوحة التحكم
         return Payment::create([
             'booking_id'      => $booking->id,
             'provider'        => 'shamcash',
-            'amount'          => $booking->total_price, // المبلغ المطلوب أصلاً
+            'amount'          => $amount,    
             'status'          => 'pending',
             'proof_file_path' => $pdfPath
         ]);
