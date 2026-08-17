@@ -3,16 +3,18 @@
 namespace App\Http\Controllers; // 👈 تعديل السطر هاد ليصير المجلد الرئيسي
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ListingResource;
 use App\Models\Listing;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+
 
 class AdminListingController extends Controller
 {
     public function approve($id): JsonResponse
     {
         $listing = Listing::findOrFail($id);
-        
+
         $listing->update([
             'moderation_status' => 'approved',
             'rejection_reason'  => null
@@ -29,11 +31,11 @@ class AdminListingController extends Controller
     {
         $request->validate([
             'rejection_reason' => ['required', 'string', 'max:1000']
-        
+
         ]);
 
         $listing = Listing::findOrFail($id);
-        
+
         $listing->update([
             'moderation_status' => 'rejected',
             'rejection_reason'  => $request->rejection_reason
@@ -44,5 +46,28 @@ class AdminListingController extends Controller
             'message' => 'تم رفض الإعلان بنجاح، وتم تسجيل سبب الرفض.',
             'data'    => $listing
         ], 200);
+    }
+    public function pendingList(): JsonResponse
+    {
+        $listings = Listing::with([
+            'provider.user',
+            'category',
+            'district',
+            'images',
+            'variants.images',
+            'variants.availabilities.slots',
+            'variants.packageItems.includedVariant.listing',
+            'variants.packageFreelancers.freelancer.user',
+        ])->where('moderation_status', 'pending_approval')
+            ->oldest()
+            ->paginate(15);
+
+        return response()->json(
+            array_merge(
+                ['status' => true],
+                \App\Http\Resources\ListingResource::collection($listings)->response()->getData(true)
+            ),
+            200
+        );
     }
 }

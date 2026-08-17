@@ -164,7 +164,7 @@ Route::middleware(['set_locale'])->group(function () {
         Route::get('/dashboard-stats', [AdminDashboardController::class, 'stats']);
         Route::get('/bookings', [AdminBookingController::class, 'index']);
         Route::get('/listings/{id}', [AdminListingController::class, 'show']);
-        Route::get('/listings/pending', [AdminListingController::class, 'pendingList']);
+        Route::get('/pending-listings', [AdminListingController::class, 'pendingList']);
         Route::get('/bookings/{id}', [AdminBookingController::class, 'show']);
         Route::get('/job-offers/pending', [AdminJobOfferController::class, 'pendingList']);
         Route::put('/job-offers/{id}/approve', [AdminJobOfferController::class, 'approve']);
