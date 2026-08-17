@@ -49,11 +49,9 @@ class BookingController extends Controller
 
     public function cancel(Request $request, string $bookingId): JsonResponse
     {
-        // نتحقق من وجود الحجز والصلاحية أولاً (بدون lock — فقط للـ Authorization)
         $booking = \App\Models\Booking::findOrFail($bookingId);
         Gate::authorize('cancel', $booking);
 
-        // إصلاح: القيمة يجب أن تطابق الـ ENUM المُوسَّع (organizer|provider|admin|system)
         $cancelledBy = $request->user()->hasRole('provider') ? 'provider' : 'organizer';
 
         $booking = $this->bookingService->cancel(
@@ -62,7 +60,7 @@ class BookingController extends Controller
             $request->input('reason')
         );
         $this->firebaseNotificationService->sendToUser(
-            $booking->user_id, // هون حطينا رقم المستخدم مباشرة
+            $booking->user_id,
             __('notif_booking_cancelled_title'),
             __('notif_booking_cancelled_body', ['id' => $booking->id]),
             ['action' => 'booking_cancelled', 'booking_id' => $booking->id]
