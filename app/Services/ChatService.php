@@ -17,4 +17,5 @@ class ChatService
         'created_at'   => now()->toIso8601String(),
     ]);
 }
+
 }

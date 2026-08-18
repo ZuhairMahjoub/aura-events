@@ -20,25 +20,28 @@ class ChatController extends Controller
     public function initializeChat(Request $request)
     {
         $validated = $request->validate([
-            'receiver_id' => 'required|exists:providers,id',
-        ]);
+        'receiver_id' => 'required|exists:providers,id',
+    ]);
 
-        $sender   = $request->user();
-        $receiver = \App\Models\User::findOrFail($validated['receiver_id']);
+    $sender = $request->user();
 
-        $sender->loadMissing('providerProfile');
-        $receiver->loadMissing('providerProfile');
+    // جيب الـ provider وبعدين الـ user المرتبط فيه، مش findOrFail مباشرة على User
+    $providerProfile = \App\Models\Provider::with('user.providerProfile')
+        ->findOrFail($validated['receiver_id']);
 
-        $senderId   = $sender->id;
-        $receiverId = $receiver->id;
+    $receiver = $providerProfile->user;
 
-        $providerType = null;
+    if (!$receiver) {
+        abort(404, 'No user associated with this provider.');
+    }
 
-        if ($receiver->isProvider()) {
-            $providerType = $receiver->providerProfile?->provider_type;
-        } elseif ($sender->isProvider()) {
-            $providerType = $sender->providerProfile?->provider_type;
-        }
+    $sender->loadMissing('providerProfile');
+
+    $senderId   = $sender->id;
+    $receiverId = $receiver->id;
+
+    $providerType = $providerProfile->provider_type
+        ?? $sender->providerProfile?->provider_type;
 
         return DB::transaction(function () use ($senderId, $receiverId, $providerType) {
 
@@ -71,4 +74,5 @@ class ChatController extends Controller
             ]);
         });
     }
+    
 }

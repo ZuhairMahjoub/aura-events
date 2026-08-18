@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Booking;
 use App\Models\Payment;
 use App\Processors\BookingPaymentProcessor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
+use App\Services\FirebaseNotificationService;
 
 class PaymentController extends Controller
 {
@@ -22,17 +25,51 @@ class PaymentController extends Controller
         'data' => $payments,
     ]);
 }
-  public function uploadProof(Request $request, BookingPaymentProcessor $processor)
-{
+ public function uploadProof(
+    Request $request,
+    BookingPaymentProcessor $processor,
+     FirebaseNotificationService $firebaseNotificationService 
+) {
     $request->validate([
         'booking_id' => 'required|exists:bookings,id',
         'proof_file' => 'required|file|mimes:pdf|max:2048',
         'amount'     => 'required|numeric|min:1',
     ]);
 
+    $existingPayment = Payment::where('booking_id', $request->booking_id)
+        ->whereIn('status', ['pending', 'completed'])
+        ->first();
+
+    if ($existingPayment) {
+        $message = $existingPayment->status === 'completed'
+            ? 'تم تأكيد الدفع لهذا الحجز مسبقاً.'
+            : 'يوجد دفعة مرفوعة لهذا الحجز قيد المراجعة حالياً.';
+
+        return response()->json([
+            'message'         => $message,
+            'payment_status'  => $existingPayment->status,
+        ], 409);
+    }
+
     $path = $request->file('proof_file')->store('payments', 'public');
 
     $processor->storeProof($request->booking_id, $path, $request->input('amount'));
+
+    // إشعار المستخدم: تم استلام إثبات الدفع بنجاح
+    $booking = Booking::find($request->booking_id);
+
+    if ($booking) {
+        $result = $firebaseNotificationService->sendToUser(
+            $booking->user_id,
+            __('notif_payment_proof_received_title'),
+            __('notif_payment_proof_received_body'),
+            ['action' => 'payment_proof_received', 'booking_id' => $booking->id]
+        );
+
+        if (!($result['success'] ?? false)) {
+            Log::warning("Booking #{$booking->id}: payment proof notification failed - " . ($result['message'] ?? 'unknown reason'));
+        }
+    }
 
     return response()->json(['message' => 'تم استلام الملف بنجاح.']);
 }
