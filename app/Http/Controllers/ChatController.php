@@ -74,5 +74,40 @@ class ChatController extends Controller
             ]);
         });
     }
+    public function getMessages(Request $request, string $firebaseChatId)
+{
+    $validated = $request->validate([
+        'limit'  => 'sometimes|integer|min:1|max:100',
+        'cursor' => 'sometimes|string', // آخر message id من الصفحة السابقة
+    ]);
+
+    $userId = $request->user()->id;
+
+    // ✅ التحقق الحاسم: المستخدم لازم يكون participant، وإلا 403
+    $chatRoom = ChatRoom::where('firebase_chat_id', $firebaseChatId)
+        ->whereHas('participants', fn($q) => $q->where('user_id', $userId))
+        ->first();
+
+    if (!$chatRoom) {
+        return response()->json([
+            'status'  => 'error',
+            'message' => 'غير مصرح بالوصول لهذه المحادثة.',
+        ], 403);
+    }
+
+    $messages = $this->chatService->getMessages(
+        $firebaseChatId,
+        $validated['limit'] ?? 30,
+        $validated['cursor'] ?? null
+    );
+
+    return response()->json([
+        'status' => 'success',
+        'data'   => [
+            'messages'    => $messages,
+            'next_cursor' => count($messages) > 0 ? end($messages)['id'] : null,
+        ],
+    ]);
+}
     
 }

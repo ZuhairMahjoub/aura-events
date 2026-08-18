@@ -339,4 +339,50 @@ public function getQrCode(Request $request): JsonResponse
 
         return response()->json($providers, 200);
     }
+    /**
+     * جلب رصيد محفظة المزوّد الحالي.
+     */
+    public function wallet(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'يجب تسجيل الدخول أولاً.'
+                ], 401);
+            }
+
+            if (!$user->hasRole('provider')) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'غير مصرح. هذه الخدمة للمزودين فقط.'
+                ], 403);
+            }
+
+            $provider = $user->providerProfile;
+
+            if (!$provider) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'لم يتم إكمال بيانات البروفايل بعد.'
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data'   => [
+                    'wallet_balance' => (float) $provider->wallet_balance,
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error("Get Provider Wallet Error: " . $e->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'حدث خطأ أثناء جلب تفاصيل المحفظة، يرجى المحاولة لاحقاً.'
+            ], 500);
+        }
+    }
 }

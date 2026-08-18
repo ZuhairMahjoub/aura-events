@@ -258,9 +258,16 @@ Route::middleware(['set_locale'])->group(function () {
         Route::get('/provider/qr', [ProviderController::class, 'getQrCode']);
     });
 });
+Route::get('/freelancers/{id}/blocked-dates', [FreelancerBlockedDateController::class, 'getPublicBlockedDates']);
 Route::middleware(['auth:sanctum', 'provider_type:company'])->group(function () {
 
     Route::get('/company/blocked-dates', [CompanyBlockedDateController::class, 'index']);
     Route::post('/company/blocked-dates', [CompanyBlockedDateController::class, 'store']);
     Route::delete('/company/blocked-dates/{id}', [CompanyBlockedDateController::class, 'destroy']);
 });
+
+Route::middleware(['auth:sanctum', 'role:provider'])->prefix('provider')->group(function () {
+    
+    Route::get('/wallet', [ProviderController::class, 'wallet']);
+});
+Route::get('/chats/{firebaseChatId}/messages', [ChatController::class, 'getMessages']);

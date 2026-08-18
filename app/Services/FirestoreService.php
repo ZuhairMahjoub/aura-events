@@ -50,4 +50,66 @@ class FirestoreService
             'json' => ['fields' => $fields],
         ]);
     }
+    public function getMessages(string $chatId, int $limit = 30, ?string $startAfterDocId = null): array
+    {
+        // بناء مسار الاستعلام عبر الـ REST API
+        $query = [
+            'structuredQuery' => [
+                'from' => [
+                    ['collectionId' => 'messages']
+                ],
+                'orderBy' => [
+                    [
+                        'field' => ['fieldPath' => 'created_at'],
+                        'direction' => 'DESCENDING'
+                    ]
+                ],
+                'limit' => $limit,
+            ]
+        ];
+
+        // إذا وُجد كيرسر (الصفحة السابقة)، نضيفه للبدء من بعده
+        if ($startAfterDocId) {
+            // ملاحظة: لجلب مستند البداية عبر الـ REST API نحتاج لاسم المستند الكامل
+            $responseDoc = $this->client->get("chats/{$chatId}/messages/{$startAfterDocId}");
+            $docData = json_decode($responseDoc->getBody()->getContents(), true);
+            
+            if (isset($docData['createTime'])) {
+                $query['structuredQuery']['startAt'] = [
+                    'values' => [
+                        ['timestampValue' => $docData['createTime']]
+                    ],
+                    'before' => false // تعني startAfter
+                ];
+            }
+        }
+
+        $response = $this->client->post("chats/{$chatId}/messages:runQuery", [
+            'json' => $query
+        ]);
+
+        $results = json_decode($response->getBody()->getContents(), true);
+        $messages = [];
+
+        foreach ($results as $item) {
+            if (isset($item['document'])) {
+                $doc = $item['document'];
+                // استخراج الـ ID من اسم المستند الكامل
+                $nameParts = explode('/', $doc['name']);
+                $docId = end($nameParts);
+
+                // تحويل حقول الـ Firestore REST إلى مصفوفة عادية
+                $fields = [];
+                if (isset($doc['fields'])) {
+                    foreach ($doc['fields'] as $key => $val) {
+                        $fields[$key] = array_values($val)[0] ?? null;
+                    }
+                }
+
+                $messages[] = array_merge(['id' => $docId], $fields);
+            }
+        }
+
+        return $messages;
+    }
 }

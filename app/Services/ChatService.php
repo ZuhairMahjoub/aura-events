@@ -17,5 +17,9 @@ class ChatService
         'created_at'   => now()->toIso8601String(),
     ]);
 }
+public function getMessages(string $chatId, int $limit = 30, ?string $cursor = null): array
+{
+    return $this->firestoreService->getMessages($chatId, $limit, $cursor);
+}
 
 }
