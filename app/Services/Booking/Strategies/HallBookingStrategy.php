@@ -50,7 +50,7 @@ class HallBookingStrategy implements BookingStrategyInterface
                 'listing_slot_id' => 'هذا الـ Slot محجوز بالفعل، يرجى اختيار وقت آخر.',
             ]);
         }
-         if ($slot->remaining_capacity < $data->quantity) {
+         if ($slot->remaining_capacity ==0 || $slot->remaining_capacity < $data->quantity) {
             throw ValidationException::withMessages([
                 'listing_slot_id' => "الطاقة الاستيعابية غير كافية. المتاح: {$slot->remaining_capacity}.",
             ]);

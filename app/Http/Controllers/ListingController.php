@@ -182,7 +182,7 @@ class ListingController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $listing
+            'data'    => new ListingResource($listing)
         ]);
     }
     /**

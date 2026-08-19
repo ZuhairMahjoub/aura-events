@@ -152,20 +152,22 @@ Route::middleware(['set_locale'])->group(function () {
     });
 
     Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function () {
-        Route::put('/{paymentId}/confirm', [PaymentController::class, 'confirmPayment']);
-        Route::put('/{paymentId}/reject', [PaymentController::class, 'rejectPayment']);
+        Route::put('/payments/{paymentId}/confirm', [PaymentController::class, 'confirmPayment']);
+        Route::put('/payments/{paymentId}/reject', [PaymentController::class, 'rejectPayment']);
         Route::get('/payments', [PaymentController::class, 'index']);
         Route::put('/providers/{id}/approve', [AdminProviderController::class, 'approve']);
         Route::put('/providers/{id}/reject', [AdminProviderController::class, 'reject']);
         Route::put('/listings/{id}/approve', [AdminListingController::class, 'approve']);
         Route::put('/listings/{id}/reject', [AdminListingController::class, 'reject']);
-        Route::get('/providers/{id}', [AdminProviderController::class, 'showProvider']);
-        Route::get('/Organzier/{id}', [AdminProviderController::class, 'getUserDetails']);
         Route::get('/dashboard-stats', [AdminDashboardController::class, 'stats']);
+        Route::get('/providers/rating', [AdminDashboardController::class, 'getAllProvidersRatings']);
+        Route::get('/topListings', [AdminDashboardController::class, 'getTopFiveListings']);
+        Route::get('/providers/{id}', [AdminProviderController::class, 'showProvider']);
+        Route::get('/organizer/{id}', [AdminProviderController::class, 'getUserDetails']);
         Route::get('/bookings', [AdminBookingController::class, 'index']);
-        Route::get('/listings/{id}', [AdminListingController::class, 'show']);
-        Route::get('/pending-listings', [AdminListingController::class, 'pendingList']);
         Route::get('/bookings/{id}', [AdminBookingController::class, 'show']);
+        Route::get('/pending-listings', [AdminListingController::class, 'pendingList']);
+        Route::get('/listings/{id}', [AdminListingController::class, 'show']);
         Route::get('/job-offers/pending', [AdminJobOfferController::class, 'pendingList']);
         Route::put('/job-offers/{id}/approve', [AdminJobOfferController::class, 'approve']);
         Route::put('/job-offers/{id}/reject', [AdminJobOfferController::class, 'reject']);
