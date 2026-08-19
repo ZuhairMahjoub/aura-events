@@ -9,7 +9,6 @@ use App\Models\Booking;
 use App\Models\BookingStatusLog;
 use App\Models\FreelancerBlockedDate;
 use App\Models\Listing;
-use App\Models\ListingSlot;
 use App\Services\Booking\BookingStrategyFactory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -24,10 +23,15 @@ class BookingService
         private readonly BookingStrategyFactory $strategyFactory,
     ) {}
 
+    /**
+     * متّسقة الآن فعلياً مع enum('cancelled_by', [...]) بعد migration
+     * 2026_07_01_000001_fix_bookings_table_columns (إصلاح الخطأ ب).
+     */
     private const VALID_CANCELLERS = ['organizer', 'provider', 'admin', 'system'];
 
     public function book(BookingData $data): Booking
     {
+
         $listing = Listing::with(['provider', 'variants'])->findOrFail($data->listingId);
 
         if ($listing->moderation_status !== 'approved') {
@@ -54,26 +58,6 @@ class BookingService
             ]);
         }
 
-        // 🔍 التحقق الديناميكي الفعلي من السعة المتبقية لمنع أي أخطاء أو قيم سالبة
-        if ($data->slotId) {
-            $slot = ListingSlot::find($data->slotId);
-            
-            if ($slot) {
-                // حساب السعة المتبقية ديناميكياً بناءً على الحجوزات النشطة الحالية
-                $activeBookingsQuantity = $slot->bookings()
-                    ->whereNotIn('status', ['cancelled', 'rejected', 'expired'])
-                    ->sum('quantity');
-
-                $realRemainingCapacity = max(0, $slot->capacity - $activeBookingsQuantity);
-
-                if ($data->quantity > $realRemainingCapacity) {
-                    throw ValidationException::withMessages([
-                        'quantity' => 'عذراً، الكمية المطلوبة (' . $data->quantity . ') أكبر من السعة المتبقية الفعلية في هذا الـ Slot (' . $realRemainingCapacity . ').',
-                    ]);
-                }
-            }
-        }
-
         $strategy = $this->strategyFactory->make($listing->listing_type);
 
         return DB::transaction(function () use ($data, $listing, $strategy) {
@@ -86,23 +70,23 @@ class BookingService
             $mergedMetadata = array_merge($data->metadata, $typeMetadata);
 
             $booking = Booking::create([
-                'user_id'            => $data->userId,
-                'provider_id'        => $listing->provider_id,
-                'listing_id'         => $data->listingId,
-                'listing_variant_id' => $data->variantId,
-                'listing_slot_id'    => $data->slotId,
-                'booking_type'       => $listing->listing_type,
-                'status'             => 'pending',
-                'payment_status'     => 'unpaid',
-                'quantity'           => $data->quantity,
-                'total_price'        => $this->calculatePrice($data, $listing),
-                'currency'           => 'SYP',
-                'booked_date'        => $timeSnapshot['booked_date'],
-                'booked_start_time'  => $timeSnapshot['booked_start_time'],
-                'booked_end_time'    => $timeSnapshot['booked_end_time'],
-                'metadata'           => $mergedMetadata,
-                'customer_notes'     => $data->customerNotes,
-                'pending_expires_at' => now()->addHours(config('booking.pending_timeout_hours')),
+                'user_id'             => $data->userId,
+                'provider_id'         => $listing->provider_id,
+                'listing_id'          => $data->listingId,
+                'listing_variant_id'  => $data->variantId,
+                'listing_slot_id'     => $data->slotId,
+                'booking_type'        => $listing->listing_type,
+                'status'              => 'pending',
+                'payment_status'      => 'unpaid',
+                'quantity'            => $data->quantity,
+                'total_price'         => $this->calculatePrice($data, $listing),
+                'currency'            => 'SYP',
+                'booked_date'         => $timeSnapshot['booked_date'],
+                'booked_start_time'   => $timeSnapshot['booked_start_time'],
+                'booked_end_time'     => $timeSnapshot['booked_end_time'],
+                'metadata'            => $mergedMetadata,
+                'customer_notes'      => $data->customerNotes,
+                'pending_expires_at'  => now()->addHours(config('booking.pending_timeout_hours')),
             ]);
 
             $this->logTransition($booking, null, 'pending', 'organizer', $data->userId);
@@ -124,6 +108,15 @@ class BookingService
         });
     }
 
+    /**
+     * ينفّذ عبر Scheduled Command (bookings:expire-stale) — يمر على كل
+     * الحجوزات pending اللي تجاوزت مهلتها (pending_expires_at < now())
+     * ويحوّلها لـ 'expired' + يرجّع السعة/التاريخ المحجوزين، بنفس آلية
+     * cancel() تماماً (إعادة استخدام releaseCapacity/logTransition بدل
+     * تكرار المنطق).
+     *
+     * @return int عدد الحجوزات اللي انتهت مهلتها بهالتشغيلة
+     */
     public function expireStalePendingBookings(): int
     {
         $staleBookingIds = Booking::where('status', 'pending')
@@ -137,6 +130,9 @@ class BookingService
             DB::transaction(function () use ($bookingId, &$expiredCount) {
                 $booking = Booking::lockForUpdate()->find($bookingId);
 
+                // إعادة الفحص جوا القفل: ممكن حالته تغيّرت (المزوّد رد
+                // بالضبط قبل ما توصل هالتشغيلة) بين الـ pluck() فوق واللحظة
+                // هاي - فما لازم نلغيها بالغلط.
                 if (! $booking || $booking->status !== 'pending') {
                     return;
                 }
@@ -184,15 +180,21 @@ class BookingService
             $this->releaseCapacity($booking);
             $this->releaseFreelancerDateIfApplicable($booking);
 
+            // إصلاح ثغرة "دفع بدون استرجاع": لو الحجز كان مدفوع فعلياً
+            // وقت الإلغاء، ما نسيبش payment_status عالة 'paid' وكأنه ولا
+            // شي صار - نحوّلها 'refund_pending' عشان يصير فيه أثر واضح
+            // بقاعدة البيانات إنه في مبلغ مستحق استرجاعه (حتى لو الاسترجاع
+            // الفعلي عبر بوابة الدفع بيصير يدوياً حالياً لحد ما يتكامل
+            // Payment Gateway حقيقي).
             $paymentStatusUpdate = $booking->payment_status === 'paid'
                 ? ['payment_status' => 'refund_pending']
                 : [];
 
             $booking->update([
-                'status'             => 'cancelled',
-                'cancelled_at'       => now(),
-                'cancelled_by'       => $cancelledBy,
-                'cancellation_reason' => $reason,
+                'status'               => 'cancelled',
+                'cancelled_at'         => now(),
+                'cancelled_by'         => $cancelledBy,
+                'cancellation_reason'  => $reason,
                 ...$paymentStatusUpdate,
             ]);
 
@@ -237,6 +239,17 @@ class BookingService
         });
     }
 
+    /**
+     * إصلاح الخطأ (ج): سابقاً accepted -> completed مباشرة دون أي تحقق من
+     * الدفع، رغم وجود عمود payment_status وحالة 'confirmed' في الـ enum
+     * لا يستخدمهما أي كود فعلياً. الآن:
+     *  - نضيف confirmPayment() لتفعيل الانتقال accepted -> confirmed
+     *    فعلياً عند نجاح الدفع (تستدعى من PaymentService/Webhook).
+     *  - complete() يقبل الحالتين accepted أو confirmed مؤقتاً (توافقية
+     *    خلفية مع الحجوزات التي لا تتطلب دفعاً إلكترونياً، كدفع نقدي)،
+     *    لكن إن كان total_price > 0 ولم يُدفع، تُرفض العملية صراحة بدل
+     *    السماح بها بصمت كما كان يحدث سابقاً.
+     */
     public function confirmPayment(string $bookingId, ?string $paymentReference = null): Booking
     {
         return DB::transaction(function () use ($bookingId, $paymentReference) {
@@ -275,6 +288,8 @@ class BookingService
                 );
             }
 
+            // الحارس الفعلي المفقود سابقاً: لا تُكمَل أي عملية ذات قيمة مالية
+            // فعلية دون أن تُدفع، حتى لو كانت الحالة 'accepted'.
             if ((float) $booking->total_price > 0 && $booking->payment_status !== 'paid') {
                 throw new \DomainException(
                     'لا يمكن إكمال الحجز قبل تأكيد الدفع (payment_status يجب أن تكون paid).',
@@ -326,28 +341,73 @@ class BookingService
         });
     }
 
-    private function blockFreelancerDateIfApplicable(Booking $booking): void
-    {
-        if ($booking->booking_type === 'package') {
-            $this->blockPackageFreelancersDate($booking);
-            return;
-        }
+    /**
+     * الخطوة 6: عند قبول حجز لفريلانسر، نحجز تاريخه تلقائياً بروزنامته
+     * (source = booking) حتى ينمنع تعارضه بأي تنسيق آخر بنفس اليوم.
+     */
+  private function blockFreelancerDateIfApplicable(Booking $booking): void
+{
+    // ⚠️ إصلاح Bug #4.3: حجز من نوع 'package' لا يخص فريلانسر واحد مباشرة —
+    // provider_id هون هو الشركة (صاحبة الـ Listing)، فالفحص القديم
+    // ($booking->provider->provider_type !== 'freelancer') كان يرجع فوراً
+    // ويتجاهل بالكامل أي فريلانسر مشارك جوا package_freelancers، فروزنامتهم
+    // الشخصية ما كانت تنحجز إطلاقاً رغم التزامهم الفعلي بهاد اليوم.
+    if ($booking->booking_type === 'package') {
+        $this->blockPackageFreelancersDate($booking);
+        return;
+    }
 
-        if ($booking->provider?->provider_type !== 'freelancer') {
-            return;
-        }
+    if ($booking->provider?->provider_type !== 'freelancer') {
+        return;
+    }
 
-        $startTime = $booking->booked_start_time;
-        $endTime   = $booking->booked_end_time;
+    $startTime = $booking->booked_start_time;
+    $endTime   = $booking->booked_end_time;
 
-        if (FreelancerBlockedDate::hasConflict($booking->provider_id, $booking->booked_date, $startTime, $endTime)) {
+    if (FreelancerBlockedDate::hasConflict($booking->provider_id, $booking->booked_date, $startTime, $endTime)) {
+        throw new \DomainException(
+            'هذا الفريلانسر لديه حجز أو حظر متعارض بنفس التاريخ والوقت بالفعل.'
+        );
+    }
+
+    FreelancerBlockedDate::create([
+        'freelancer_id' => $booking->provider_id,
+        'blocked_date'  => $booking->booked_date,
+        'start_time'    => $startTime,
+        'end_time'      => $endTime,
+        'source'        => 'booking',
+        'booking_id'    => $booking->id,
+    ]);
+}
+
+/**
+ * يحجز روزنامة كل فريلانسر مشارك فعلياً بالباقة (package_freelancers تبع
+ * الـ variant المحجوز)، بنفس منطق الفحص/الحجز المستخدم للحجز المباشر —
+ * فحص تعارض لكل واحد فيهم أولاً (كلهم قبل أي إنشاء، لضمان عدم حجز جزئي لو
+ * فشل واحد بالنص)، ثم حجزهم كلهم دفعة وحدة لو ما في أي تعارض.
+ */
+private function blockPackageFreelancersDate(Booking $booking): void
+{
+    $packageFreelancers = $booking->variant()->with('packageFreelancers')->first()?->packageFreelancers ?? collect();
+
+    if ($packageFreelancers->isEmpty()) {
+        return;
+    }
+
+    $startTime = $booking->booked_start_time;
+    $endTime   = $booking->booked_end_time;
+
+    foreach ($packageFreelancers as $packageFreelancer) {
+        if (FreelancerBlockedDate::hasConflict($packageFreelancer->freelancer_id, $booking->booked_date, $startTime, $endTime)) {
             throw new \DomainException(
-                'هذا الفريلانسر لديه حجز أو حظر متعارض بنفس التاريخ والوقت بالفعل.'
+                'أحد الفريلانسرز المشاركين بهذه الباقة لديه حجز أو حظر متعارض بنفس التاريخ والوقت بالفعل.'
             );
         }
+    }
 
+    foreach ($packageFreelancers as $packageFreelancer) {
         FreelancerBlockedDate::create([
-            'freelancer_id' => $booking->provider_id,
+            'freelancer_id' => $packageFreelancer->freelancer_id,
             'blocked_date'  => $booking->booked_date,
             'start_time'    => $startTime,
             'end_time'      => $endTime,
@@ -355,43 +415,21 @@ class BookingService
             'booking_id'    => $booking->id,
         ]);
     }
-
-    private function blockPackageFreelancersDate(Booking $booking): void
-    {
-        $packageFreelancers = $booking->variant()->with('packageFreelancers')->first()?->packageFreelancers ?? collect();
-
-        if ($packageFreelancers->isEmpty()) {
-            return;
-        }
-
-        $startTime = $booking->booked_start_time;
-        $endTime   = $booking->booked_end_time;
-
-        foreach ($packageFreelancers as $packageFreelancer) {
-            if (FreelancerBlockedDate::hasConflict($packageFreelancer->freelancer_id, $booking->booked_date, $startTime, $endTime)) {
-                throw new \DomainException(
-                    'أحد الفريلانسرز المشاركين بهذه الباقة لديه حجز أو حظر متعارض بنفس التاريخ والوقت بالفعل.'
-                );
-            }
-        }
-
-        foreach ($packageFreelancers as $packageFreelancer) {
-            FreelancerBlockedDate::create([
-                'freelancer_id' => $packageFreelancer->freelancer_id,
-                'blocked_date'  => $booking->booked_date,
-                'start_time'    => $startTime,
-                'end_time'      => $endTime,
-                'source'        => 'booking',
-                'booking_id'    => $booking->id,
-            ]);
-        }
-    }
-
+}
+    /**
+     * الخطوة 6: عند رفض/إلغاء حجز فريلانسر، نحرر تاريخه من الروزنامة
+     * (فقط التواريخ التي حجزها هذا الحجز تحديداً عبر booking_id).
+     */
     private function releaseFreelancerDateIfApplicable(Booking $booking): void
     {
         FreelancerBlockedDate::where('booking_id', $booking->id)->delete();
     }
 
+    /**
+     * نقطة الكتابة الوحيدة لسجل التدقيق — لا تُستدعى مباشرة من خارج
+     * هذا الـ Service، فتبقى booking_status_logs دائماً متّسقة 100% مع
+     * أي تغيير فعلي في عمود status (لا يوجد مسار يغيّر الحالة من دونها).
+     */
     private function logTransition(
         Booking $booking,
         ?string $fromStatus,
@@ -425,6 +463,19 @@ class BookingService
         return (float) $variant->price * $data->quantity;
     }
 
+    /**
+     * إصلاح حرج: كانت هذه الدالة تعتمد على match() صريح بقائمة أنواع مكرَّرة
+     * يدوياً من BookingStrategyFactory، مع 'default => null' صامت. النتيجة:
+     * حجز من نوع 'package' (والمسجّل أصلاً في الـ Factory) لم يكن له أي حالة
+     * هنا، فإلغاء/رفض حجز باقة لا يُعيد أي مخزون أو سعة سلوتات محجوزة
+     * لمكوناتها (منتجات + قاعات/خدمات) — تسرّب مخزون دائم مع كل إلغاء.
+     *
+     * الحل: التفويض الكامل لنفس الـ Strategy المسؤولة أصلاً عن الحجز
+     * (عبر release() الإلزامية على BookingStrategyInterface)، فلا يوجد بعد
+     * الآن مسار يسمح بإضافة نوع حجز جديد بالـ Factory دون تطبيق منطق
+     * تحريره أيضاً — الواجهة تفرض ذلك عبر PHP نفسها (Fatal Error عند عدم
+     * التطبيق)، لا "اتفاق ضمني" قابل للنسيان.
+     */
     private function releaseCapacity(Booking $booking): void
     {
         $this->strategyFactory->make($booking->booking_type)->release($booking);
@@ -487,7 +538,7 @@ class BookingService
             ->when($filters['status'] ?? null, fn($q, $status) => $q->where('status', $status))
             ->when($filters['booking_type'] ?? null, fn($q, $type) => $q->where('booking_type', $type))
             ->with([
-                'user',
+                'user', // مين حجز (الزبون كاملاً: اسم، هاتف، إيميل)
                 'slot',
                 'listing.images',
                 'listing.provider',
@@ -498,6 +549,7 @@ class BookingService
             ->paginate($perPage);
     }
 
+    /** سجل تاريخ حالات حجز معيّن — جاهز للاستخدام مباشرة في BookingController::show أو endpoint مخصص. */
     public function getStatusHistory(string $bookingId)
     {
         return BookingStatusLog::where('booking_id', $bookingId)
