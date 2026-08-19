@@ -167,24 +167,24 @@ class ListingController extends Controller
         }
     }
 
-    public function show(string $id, Request $request)
-    {
-        $listing = Listing::with([
-            'images',
-            'variants.packageItems.includedVariant.listing',
-            'variants.packageFreelancers.freelancer',
-            'category',
-            'district',
-            'variants.images',
-            'variants.availabilities.slots'
-        ])->findOrFail($id);
+   public function show(string $id, Request $request)
+{
+    $listing = Listing::with([
+        'images',
+        'variants.packageItems.includedVariant.listing',
+        'variants.packageFreelancers.freelancer',
+        'category',
+        'district',
+        'variants.images',
+        'variants.availabilities.slots',
+        'provider.user'
+    ])->findOrFail($id);
 
-
-        return response()->json([
-            'status' => 'success',
-            'data'    => new ListingResource($listing)
-        ]);
-    }
+    return response()->json([
+        'status' => 'success',
+        'data'    => new ListingResource($listing)        
+    ]);
+}
     /**
      * GET /provider/my-products
      * جلب المنتجات المادية (Physical Products) الخاصة بالشركة الحالية فقط

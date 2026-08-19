@@ -9,12 +9,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Models\Booking;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use App\Http\Resources\BookingResource;
-use Illuminate\Support\Facades\DB;
 use App\Services\FirebaseNotificationService;
 use App\Http\Resources\BookResource;
- 
-
 
 class BookingController extends Controller
 {
@@ -27,29 +25,196 @@ class BookingController extends Controller
         $this->firebaseNotificationService = $firebaseNotificationService;
     }
 
+    /**
+     * =========================================================
+     *  NOTIFICATION HELPERS
+     * =========================================================
+     */
+
+    private function resolveProviderUserId(Booking $booking): ?string
+    {
+        $providerUserId = $booking->provider?->user_id;
+
+        if (!$providerUserId) {
+            Log::warning("Booking #{$booking->id}: no linked user_id found for provider #{$booking->provider_id}. Notification skipped.");
+        }
+
+        return $providerUserId;
+    }
+
+    private function notifyUser(Booking $booking, string $title, string $body, array $extraData = []): void
+    {
+        $result = $this->firebaseNotificationService->sendToUser(
+            $booking->user_id,
+            $title,
+            $body,
+            array_merge(['booking_id' => $booking->id], $extraData)
+        );
+
+        if (!($result['success'] ?? false)) {
+            Log::warning("Booking #{$booking->id}: user notification failed - " . ($result['message'] ?? 'unknown reason'));
+        }
+    }
+
+    private function notifyProvider(Booking $booking, string $title, string $body, array $extraData = []): void
+    {
+        $providerUserId = $this->resolveProviderUserId($booking);
+
+        if (!$providerUserId) {
+            return;
+        }
+
+        $result = $this->firebaseNotificationService->sendToUser(
+            $providerUserId,
+            $title,
+            $body,
+            array_merge(['booking_id' => $booking->id], $extraData)
+        );
+
+        if (!($result['success'] ?? false)) {
+            Log::warning("Booking #{$booking->id}: provider notification failed - " . ($result['message'] ?? 'unknown reason'));
+        }
+    }
+
+    /**
+     * =========================================================
+     *  BOOKING LIFECYCLE ACTIONS (كل حالة: رسالة لليوزر + رسالة للبروفايدر)
+     * =========================================================
+     */
+
     public function store(StoreBookingRequest $request): JsonResponse
     {
-        $data = \App\Models\Booking::fromRequest(
+        $data = Booking::fromRequest(
             $request->validated(),
             $request->user()->id
         );
 
         $booking = $this->bookingService->book($data);
-        $this->firebaseNotificationService->sendToUser(
-            $booking->provider_id,
+
+        // 1) للمستخدم: تذكير بالدفع خلال 3 أيام
+        $this->notifyUser(
+            $booking,
+            __('notif_booking_payment_due_title'),
+            __('notif_booking_payment_due_body'),
+            ['action' => 'booking_payment_due']
+        );
+
+        // 2) لمزود الخدمة: طلب حجز جديد
+        $this->notifyProvider(
+            $booking,
             __('notif_booking_new_title'),
             __('notif_booking_new_body', ['name' => $request->user()->first_name]),
-            ['action' => 'new_booking', 'booking_id' => $booking->id]
+            ['action' => 'new_booking']
         );
+
         return response()->json([
             'message' => 'تم إرسال طلب الحجز بنجاح.',
             'data'    => $booking,
         ], 201);
     }
 
+    public function accept(string $bookingId): JsonResponse
+    {
+        $booking = Booking::findOrFail($bookingId);
+        Gate::authorize('accept', $booking);
+
+        $providerId = request()->user()->providerProfile->id;
+        $booking = $this->bookingService->accept($bookingId, $providerId);
+
+        // 1) للمستخدم: تم قبول حجزك
+        $this->notifyUser(
+            $booking,
+            __('notif_booking_accepted_title'),
+            __('notif_booking_accepted_body'),
+            ['action' => 'booking_accepted']
+        );
+
+        // 2) لمزود الخدمة: تأكيد أنه قَبِل الطلب بنجاح
+        $this->notifyProvider(
+            $booking,
+            __('notif_booking_accepted_provider_title'),
+            __('notif_booking_accepted_provider_body'),
+            ['action' => 'booking_accepted_confirmation']
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم قبول الحجز بنجاح.',
+            'data'    => $booking,
+        ]);
+    }
+
+    public function reject(string $bookingId): JsonResponse
+    {
+        $booking = Booking::findOrFail($bookingId);
+        Gate::authorize('reject', $booking);
+
+        $providerProfile = request()->user()->providerProfile;
+        if (!$providerProfile) {
+            abort(403, 'يجب أن تمتلك ملف مزود خدمة لإجراء هذه العملية.');
+        }
+
+        $rejectedBooking = $this->bookingService->reject(
+            $bookingId,
+            $providerProfile->id,
+            request()->input('reason')
+        );
+
+        // 1) للمستخدم: تم رفض حجزك
+        $this->notifyUser(
+            $rejectedBooking,
+            __('notif_booking_rejected_title'),
+            __('notif_booking_rejected_body'),
+            ['action' => 'booking_rejected']
+        );
+
+        // 2) لمزود الخدمة: تأكيد أنه رفض الطلب
+        $this->notifyProvider(
+            $rejectedBooking,
+            __('notif_booking_rejected_provider_title'),
+            __('notif_booking_rejected_provider_body'),
+            ['action' => 'booking_rejected_confirmation']
+        );
+
+        return response()->json([
+            'message' => 'تم رفض الحجز بنجاح.',
+            'booking' => $rejectedBooking,
+        ]);
+    }
+
+    public function complete(string $bookingId): JsonResponse
+    {
+        $booking = Booking::findOrFail($bookingId);
+        Gate::authorize('complete', $booking);
+
+        $booking = $this->bookingService->complete($bookingId);
+
+        // 1) للمستخدم: تم إتمام الخدمة
+        $this->notifyUser(
+            $booking,
+            __('notif_booking_completed_title'),
+            __('notif_booking_completed_body'),
+            ['action' => 'booking_completed']
+        );
+
+        // 2) لمزود الخدمة: تأكيد إتمام الخدمة
+        $this->notifyProvider(
+            $booking,
+            __('notif_booking_completed_provider_title'),
+            __('notif_booking_completed_provider_body'),
+            ['action' => 'booking_completed_provider']
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم تغيير حالة الحجز إلى مكتمل بنجاح.',
+            'data'    => $booking,
+        ]);
+    }
+
     public function cancel(Request $request, string $bookingId): JsonResponse
     {
-        $booking = \App\Models\Booking::findOrFail($bookingId);
+        $booking = Booking::findOrFail($bookingId);
         Gate::authorize('cancel', $booking);
 
         $cancelledBy = $request->user()->hasRole('provider') ? 'provider' : 'organizer';
@@ -59,12 +224,23 @@ class BookingController extends Controller
             $cancelledBy,
             $request->input('reason')
         );
-        $this->firebaseNotificationService->sendToUser(
-            $booking->user_id,
-            __('notif_booking_cancelled_title'),
-            __('notif_booking_cancelled_body', ['id' => $booking->id]),
-            ['action' => 'booking_cancelled', 'booking_id' => $booking->id]
-        );
+
+        // الطرف يلي ألغى ما بينشعر لحاله، بس الطرف التاني
+        if ($cancelledBy === 'organizer') {
+            $this->notifyProvider(
+                $booking,
+                __('notif_booking_cancelled_title'),
+                __('notif_booking_cancelled_body', ['id' => $booking->id]),
+                ['action' => 'booking_cancelled']
+            );
+        } else {
+            $this->notifyUser(
+                $booking,
+                __('notif_booking_cancelled_title'),
+                __('notif_booking_cancelled_body', ['id' => $booking->id]),
+                ['action' => 'booking_cancelled']
+            );
+        }
 
         return response()->json([
             'message' => 'تم إلغاء الحجز.',
@@ -72,141 +248,70 @@ class BookingController extends Controller
         ]);
     }
 
+    /**
+     * =========================================================
+     *  READ / LISTING ACTIONS (بدون تعديل منطقي)
+     * =========================================================
+     */
+
     public function myBookings(Request $request): JsonResponse
     {
-        // 1. استقبال الفلاتر التي قد يرسلها اليوزر
         $filters = $request->only(['status', 'booking_type']);
 
-        // 2. جلب الحجوزات الخاصة باليوزر الحالي (الأورجانيزر)
         $bookings = $this->bookingService->getUserBookings(
             $request->user()->id,
             $filters,
             $request->input('per_page', 15)
         );
 
-        // 3. إرجاع النتيجة مع الحفاظ على هيكلية الـ Pagination
         return response()->json(
             array_merge(
                 [
                     'success' => true,
-                    'message' => 'تم استرجاع حجوزاتك بنجاح.'
+                    'message' => 'تم استرجاع حجوزاتك بنجاح.',
                 ],
                 BookingResource::collection($bookings)->response()->getData(true)
             )
         );
     }
-    public function accept(string $bookingId): JsonResponse
-    {
-        $booking = \App\Models\Booking::findOrFail($bookingId);
 
-        Gate::authorize('accept', $booking);
-
-
-        $providerId = request()->user()->providerProfile->id;
-
-        $booking = $this->bookingService->accept($bookingId, $providerId);
-        $this->firebaseNotificationService->sendToUser(
-            $booking->user_id,
-            __('notif_booking_accepted_title'),
-            __('notif_booking_accepted_body'),
-            ['action' => 'booking_accepted', 'booking_id' => $booking->id]
-        );
-
-        return response()->json([
-            'success' => true,
-            'message' => 'تم قبول الحجز بنجاح.',
-            'data'    => $booking,
-        ]);
-    }
     public function providerBookings(Request $request): JsonResponse
     {
-        // 1. التحقق من أن المستخدم يملك بروفايل مزود خدمة
         if (!$request->user()->providerProfile) {
             return response()->json([
                 'success' => false,
-                'message' => 'عذراً، هذا الحساب ليس حساب مزود خدمة.'
+                'message' => 'عذراً، هذا الحساب ليس حساب مزود خدمة.',
             ], 403);
         }
 
-        // 2. جلب معرف المزود من العلاقة
         $providerId = $request->user()->providerProfile->id;
-
-        // 3. استقبال الفلاتر (مثل الستيتس ونوع الحجز)
         $filters = $request->only(['status', 'booking_type']);
 
-        // 4. استدعاء السيرفيس لجلب البيانات المفلترة والمقسمة لصفحات
         $bookings = $this->bookingService->getProviderBookings(
             $providerId,
             $filters,
             $request->input('per_page', 15)
         );
 
-        // 5. إرجاع الاستجابة بصيغة JSON مع الـ Pagination والـ Resource
         return response()->json(
             array_merge(
                 [
                     'success' => true,
-                    'message' => 'تم استرجاع حجوزات مزود الخدمة بنجاح.'
+                    'message' => 'تم استرجاع حجوزات مزود الخدمة بنجاح.',
                 ],
                 BookResource::collection($bookings)->response()->getData(true)
             )
         );
     }
+
     public function show(string $id): JsonResponse
     {
-        $booking = \App\Models\Booking::with(['user', 'listing', 'variant', 'slot'])->findOrFail($id);
-        Gate::authorize('view', $booking); // يجب أن تسمح الـ Policy للمنظم والمزود الخاص بالحجز برؤيته
+        $booking = Booking::with(['user', 'listing', 'variant', 'slot'])->findOrFail($id);
+        Gate::authorize('view', $booking);
 
         return response()->json([
             'success' => true,
             'data'    => new BookingResource($booking),
         ]);
     }
-    public function complete(string $bookingId): JsonResponse
-    {
-        $booking = \App\Models\Booking::findOrFail($bookingId);
-        Gate::authorize('complete', $booking); // تأكد من حمايتها في الـ Policy
-
-        $booking = $this->bookingService->complete($bookingId);
-        $this->firebaseNotificationService->sendToUser(
-            $booking->user_id,
-            __('notif_booking_completed_title'),
-            __('notif_booking_completed_body'),
-            ['action' => 'booking_completed', 'booking_id' => $booking->id]
-        );
-        return response()->json([
-            'success' => true,
-            'message' => 'تم تغيير حالة الحجز إلى مكتمل بنجاح.',
-            'data'    => $booking,
-        ]);
-    }
- public function reject(string $bookingId)
-{
-    $booking = Booking::findOrFail($bookingId);
-
-    Gate::authorize('reject', $booking);
-
-    $providerProfile = request()->user()->providerProfile;
-    if (!$providerProfile) {
-        abort(403, 'يجب أن تمتلك ملف مزود خدمة لإجراء هذه العملية.');
-    }
-
-    $rejectedBooking = $this->bookingService->reject(
-        $bookingId,
-        $providerProfile->id,
-        request()->input('reason')
-    );
-
-    $this->firebaseNotificationService->sendToUser(
-        $rejectedBooking->user_id,
-        __('notif_booking_rejected_title'),
-        __('notif_booking_rejected_body'),
-        ['action' => 'booking_rejected', 'booking_id' => $rejectedBooking->id]
-    );
-
-    return response()->json([
-        'message' => 'تم رفض الحجز بنجاح.',
-        'booking' => $rejectedBooking
-    ]);
-}
 }

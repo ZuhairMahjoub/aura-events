@@ -44,7 +44,7 @@ class CreateArrangementAction
                 'cancel_before_acceptance' => $data['cancel_before_acceptance'] ?? false,
                 'cancel_after_acceptance'  => $data['cancel_after_acceptance'] ?? false,
                 'cancel_before_payment'    => $data['cancel_before_payment'] ?? false,
-                'moderation_status' => 'approved',
+                'moderation_status' => 'pending_approval',
 
             ]);
 

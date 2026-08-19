@@ -23,11 +23,11 @@ class SyncArrangementAvailabilitiesAction
      */
     public function execute(ListingVariant $variant, array $availabilitiesData, int $defaultCapacity = 1): void
     {
-        // لا نفتح DB::transaction هنا — الـ transaction موجودة بالفعل
-        // في CreateArrangementAction/UpdateArrangementAction (نفس تعليق Listing).
-
-        // قفل صف الـ variant لمنع التعارض عند التحديث المتزامن (Fix #5 من Listing)
+        // قفل صف الـ variant لمنع التعارض عند التحديث المتزامن
         $variant = ListingVariant::lockForUpdate()->findOrFail($variant->id);
+
+        // استخدام السعة الخاصة بالـ variant كقيمة أساسية للـ slots إذا لم تُمرر
+        $baseCapacity = $variant->capacity ?? $variant->stock_quantity ?? $defaultCapacity;
 
         $sentIds = collect($availabilitiesData)->pluck('id')->filter()->values()->toArray();
         $toDelete = $variant->availabilities()->whereNotIn('id', $sentIds)->get();
@@ -75,12 +75,17 @@ class SyncArrangementAvailabilitiesAction
                 ]);
             }
 
-            // تعبئة الـ remaining_capacity الافتراضي من سعة الباقة قبل التمرير
-            // للـ BulkInsertSlotsAction المشتركة مع الـ Listing (والتي تستخدم 1
-            // كافتراضي عام لا يعرف شيئاً عن سعة الباقة الخاصة بنا).
+            // تعديل ديناميكي لضمان أن الـ remaining_capacity يطابق سعة الباقة الحقيقية
+            // ולא يتم الاعتماد على أرقام قديمة أو سالبة عند إعادة مزامنة أو إنشاء المواعيد
             $slots = collect($availabilityData['slots'] ?? [])
-                ->map(function ($slot) use ($defaultCapacity) {
-                    $slot['remaining_capacity'] = $slot['remaining_capacity'] ?? $defaultCapacity;
+                ->map(function ($slot) use ($baseCapacity) {
+                    // إذا لم يتم إرسال remaining_capacity أو كانت سالبة، يتم ضبطها على السعة الأساسية للباقة
+                    $incomingRemaining = $slot['remaining_capacity'] ?? null;
+                    
+                    if ($incomingRemaining === null || $incomingRemaining < 0) {
+                        $slot['remaining_capacity'] = $baseCapacity;
+                    }
+                    
                     return $slot;
                 })
                 ->toArray();
@@ -90,12 +95,7 @@ class SyncArrangementAvailabilitiesAction
     }
 
     /**
-     * تحويل نطاق زمني (date_range) إلى مصفوفة تواريخ فردية بنفس صيغة
-     * $availabilitiesData المستخدمة في execute()، تماماً كما تفعل
-     * SyncListingVariantsAction::generateAvailabilitiesFromRange للـ Listing.
-     *
-     * لا تُنشئ أي سجلات في قاعدة البيانات مباشرة — فقط تجهّز البيانات
-     * لتمريرها بعدها إلى execute() التي تتولى المزامنة الآمنة بالـ ID.
+     * تحويل نطاق زمني (date_range) إلى مصفوفة تواريخ فردية.
      */
     public function buildAvailabilitiesFromRange(array $range): array
     {
