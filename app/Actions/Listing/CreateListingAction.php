@@ -33,6 +33,7 @@ class CreateListingAction
                 'is_provider_location_based' => $data['is_provider_location_based'] ?? true,
                 'moderation_status'          => $data['moderation_status'] ?? 'draft',
                 'rejection_reason'           => $data['rejection_reason'] ?? null,
+                'capacity'                   => $data['capacity'] ?? 0
             ]);
 
             // 2. معالجة صور الـ Listing الأساسية

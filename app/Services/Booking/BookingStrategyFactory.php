@@ -17,12 +17,12 @@ class BookingStrategyFactory
      * لإضافة نوع رابع: أضف سطراً واحداً هنا فقط.
      * لا تغيير في BookingService، لا تغيير في Schema.
      */
-    private array $strategies = [
-        'physical_product' => PhysicalProductBookingStrategy::class,
-        'hall'             => HallBookingStrategy::class,
-        'service'          => ServiceBookingStrategy::class,
-        'package'          => PackageBookingStrategy::class, // مستقبلاً
-    ];
+   private array $strategies = [
+    'physical_product' => PhysicalProductBookingStrategy::class,
+    'hall'              => ServiceBookingStrategy::class,
+    'service'           => ServiceBookingStrategy::class,
+    'package'           => PackageBookingStrategy::class,
+];
 
     public function make(string $bookingType): BookingStrategyInterface
     {
