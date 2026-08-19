@@ -10,6 +10,78 @@ use Illuminate\Support\Facades\Storage;
 
 class ProviderController extends Controller
 {
+    /**
+     * عرض تفاصيل مزود خدمة محدد بناءً على الـ ID.
+     */
+    public function show($id): JsonResponse
+    {
+        try {
+            $provider = Provider::with(['user', 'companyDetails', 'freelancerDetails', 'categories'])->find($id);
+
+            if (!$provider) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'مزود الخدمة غير موجود.'
+                ], 404);
+            }
+
+            $providerDetails = $provider->provider_type === 'company'
+                ? $provider->companyDetails
+                : $provider->freelancerDetails;
+
+            return response()->json([
+                'status' => 'success',
+                'data'   => [
+                    'user' => [
+                        'id'                => $provider->user?->id,
+                        'first_name'        => $provider->user?->first_name,
+                        'last_name'         => $provider->user?->last_name,
+                        'full_name'         => $provider->user ? ($provider->user->first_name . ' ' . $provider->user->last_name) : null,
+                        'email'             => $provider->user?->email,
+                        'phone'             => $provider->user?->phone,
+                        'account_status'    => $provider->user?->status,
+                        'is_email_verified' => $provider->user ? !is_null($provider->user->email_verified_at) : false,
+                        'is_phone_verified' => $provider->user?->hasVerifiedPhone(),
+                        'created_at'        => $provider->user?->created_at,
+                    ],
+                    'provider' => [
+                        'id'                => (string) $provider->id,
+                        'brand_name'        => $provider->brand_name,
+                        'provider_type'     => $provider->provider_type,
+                        'rating'            => (float) $provider->rating,
+                        'is_verified'       => (bool) $provider->is_verified,
+                        'is_active'         => (bool) $provider->is_active,
+                        'moderation_status' => $provider->moderation_status,
+                        'qr_code_url'       => $provider->qr_code_path ? asset('storage/' . $provider->qr_code_path) : null,
+                        'categories'        => $provider->categories->map(fn($c) => [
+                            'id'      => $c->id,
+                            'name_ar' => $c->getTranslation('name', 'ar'),
+                            'name_en' => $c->getTranslation('name', 'en'),
+                        ]),
+                        'created_at'        => $provider->created_at,
+                    ],
+                    'provider_details' => $provider->provider_type === 'company'
+                        ? [
+                            'tax_number'      => $providerDetails?->tax_number,
+                            'registration_no' => $providerDetails?->registration_no,
+                            'district_id'     => $providerDetails?->district_id,
+                            'address_details' => $providerDetails?->address_details,
+                        ]
+                        : [
+                            'national_id'      => $providerDetails?->national_id,
+                            'experience_years' => $providerDetails?->experience_years,
+                        ],
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error("Get Provider Details Error: " . $e->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'حدث خطأ أثناء جلب تفاصيل المزود، يرجى المحاولة لاحقاً.'
+            ], 500);
+        }
+    }
     public function profile(Request $request): JsonResponse
     {
         try {

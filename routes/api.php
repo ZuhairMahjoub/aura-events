@@ -271,3 +271,4 @@ Route::middleware(['auth:sanctum', 'role:provider'])->prefix('provider')->group(
     Route::get('/wallet', [ProviderController::class, 'wallet']);
 });
 Route::get('/chats/{firebaseChatId}/messages', [ChatController::class, 'getMessages']);
+Route::get('providers/{id}', [ProviderController::class, 'show']);
