@@ -7,6 +7,8 @@ use App\Http\Requests\StoreJobOfferRequest;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Models\JobOffer;
+// 💡 استيراد خدمة الإشعارات
+use App\Services\FirebaseNotificationService;
 
 /**
  * إصلاحات مطبقة على هذا الملف:
@@ -22,10 +24,16 @@ use App\Models\JobOffer;
 class JobOfferController extends Controller
 {
     protected JobOfferService $jobOfferService;
+    // 💡 1. تعريف خدمة الإشعارات
+    protected FirebaseNotificationService $notificationService;
 
-    public function __construct(JobOfferService $jobOfferService)
-    {
+    // 💡 2. حقن الخدمة في الـ Constructor
+    public function __construct(
+        JobOfferService $jobOfferService,
+        FirebaseNotificationService $notificationService
+    ) {
         $this->jobOfferService = $jobOfferService;
+        $this->notificationService = $notificationService;
     }
 
     /**
@@ -39,6 +47,16 @@ class JobOfferController extends Controller
         $validated = $request->validated();
 
         $jobOffer = $this->jobOfferService->createJobOffer($validated, $company->id);
+
+        // ── 💡 3. إرسال إشعار بالإنجليزية بعد إضافة عرض العمل بنجاح ──
+        $titleEn = is_array($jobOffer->title) ? ($jobOffer->title['en'] ?? current($jobOffer->title)) : $jobOffer->title;
+
+        $this->notificationService->sendToUser(
+            $request->user()->id,
+            'Job Offer Submitted Successfully',
+            "Your job offer '{$titleEn}' has been submitted and is pending admin approval.",
+            ['type' => 'job_offer_added', 'job_offer_id' => $jobOffer->id]
+        );
 
         return response()->json([
             'success' => true,
@@ -60,6 +78,7 @@ class JobOfferController extends Controller
             'data' => $appliedJobs,
         ], 200);
     }
+
     /**
      * [الشاشة الفاتحة] جلب المتقدمين
      */
@@ -74,6 +93,7 @@ class JobOfferController extends Controller
             'data' => $applicants,
         ], 200);
     }
+
     /**
      * جلب تفاصيل عرض عمل معين بواسطة المعرّف (ID)
      */
@@ -93,6 +113,7 @@ class JobOfferController extends Controller
             'data' => $jobOffer,
         ], 200);
     }
+
     /**
      * [أزرار الشاشة الفاتحة] قبول أو رفض طلب
      */
@@ -127,30 +148,30 @@ class JobOfferController extends Controller
     /**
      * [خاص بالتطبيق] فريلانسر يقدم على وظيفة
      */
-   public function apply(Request $request, $jobOfferId): JsonResponse
-{
-    $freelancer = $request->user()->providerProfile;
+    public function apply(Request $request, $jobOfferId): JsonResponse
+    {
+        $freelancer = $request->user()->providerProfile;
 
-    $application = $this->jobOfferService->applyToJob($jobOfferId, $freelancer->id);
+        $application = $this->jobOfferService->applyToJob($jobOfferId, $freelancer->id);
 
-    if (!$application) {
-        $jobOffer = \App\Models\JobOffer::find($jobOfferId);
-        $message = ($jobOffer && !$jobOffer->is_active)
-            ? 'عذراً، هذا العرض غير مفعّل حالياً من قبل الشركة.'
-            : 'لقد قمت بالتقديم على هذه الوظيفة مسبقاً.';
+        if (!$application) {
+            $jobOffer = \App\Models\JobOffer::find($jobOfferId);
+            $message = ($jobOffer && !$jobOffer->is_active)
+                ? 'عذراً، هذا العرض غير مفعّل حالياً من قبل الشركة.'
+                : 'لقد قمت بالتقديم على هذه الوظيفة مسبقاً.';
+
+            return response()->json([
+                'success' => false,
+                'message' => $message,
+            ], 400);
+        }
 
         return response()->json([
-            'success' => false,
-            'message' => $message,
-        ], 400);
+            'success' => true,
+            'message' => 'تم تقديم طلبك بنجاح، وظهر الآن في لوحة تحكم الشركة.',
+            'data' => $application,
+        ], 201);
     }
-
-    return response()->json([
-        'success' => true,
-        'message' => 'تم تقديم طلبك بنجاح، وظهر الآن في لوحة تحكم الشركة.',
-        'data' => $application,
-    ], 201);
-}
 
     /**
      * [الشاشة الغامقة] تفعيل / تعطيل عرض العمل يدوياً من قبل الشركة

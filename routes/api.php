@@ -140,7 +140,7 @@ Route::middleware(['set_locale'])->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('book/{id}', [BookingController::class, 'show']);
         Route::post('/bookings', [BookingController::class, 'store']);
-        Route::put('/bookings/{bookingId}/cancel', [BookingController::class, 'cancel']);
+        Route::post('/bookings/{bookingId}/cancel', [BookingController::class, 'cancel']);
         Route::get('/bookings', [BookingController::class, 'myBookings']);
         Route::get('/provider/bookings', [BookingController::class, 'providerBookings']);
         Route::put('/bookings/{bookingId}/reject', [BookingController::class, 'reject']);
@@ -274,3 +274,32 @@ Route::middleware(['auth:sanctum', 'role:provider'])->prefix('provider')->group(
 });
 Route::get('/chats/{firebaseChatId}/messages', [ChatController::class, 'getMessages']);
 Route::get('providers/{id}', [ProviderController::class, 'show']);
+
+
+// أضف هذه الـ routes إلى routes/api.php
+
+use App\Http\Controllers\ProviderPolicyController;
+use App\Http\Controllers\Admin\AdminProviderSubscriptionController;
+
+// ── مسار السياسة: يحتاج المزوّد يكون approved/active بس، بدون فحص
+//    الموافقة نفسها (لأن هاد بالضبط المسار يلي بيسمحله يوافق).
+//    لذلك مجموعة middleware منفصلة، وليس approved_provider الكاملة.
+Route::middleware(['auth:sanctum', 'role:provider'])
+    ->prefix('provider')
+    ->group(function () {
+        Route::get('/policy', [ProviderPolicyController::class, 'show']);
+        Route::post('/policy/accept', [ProviderPolicyController::class, 'accept']);
+    });
+
+// ── باقي راوتات لوحة تحكم المزوّد (تحت approved_provider الكاملة، شاملة
+//    فحص السياسة) — موجودة أصلاً بالمشروع بنفس النمط، فقط تأكد أنها لا
+//    تشمل مسارات /provider/policy أعلاه (لأنها بمجموعة منفصلة).
+
+// ── مسارات الأدمن لتأكيد دفعة الاشتراك ──────────────────────────────────
+Route::middleware(['auth:sanctum', 'role:admin'])
+    ->prefix('admin/providers/{providerId}/subscriptions')
+    ->group(function () {
+        Route::get('/', [AdminProviderSubscriptionController::class, 'index']);
+        Route::post('/confirm-payment', [AdminProviderSubscriptionController::class, 'confirmPayment']);
+    });
+Route::post('/chat/users-info', [ChatController::class, 'getChatUsersInfo']);

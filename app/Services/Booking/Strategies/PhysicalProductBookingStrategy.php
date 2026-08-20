@@ -135,12 +135,11 @@ class PhysicalProductBookingStrategy implements BookingStrategyInterface
             ]);
         }
 
-        // تحقق: السعة المتبقية للفترة
-        if ($slot->remaining_capacity <= 0) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'slot_id' => ['عذراً، هذه الفترة ممتلئة بالكامل ولا توجد سعة متبقية.']
-            ]);
-        }
+        // ملاحظة: فحص remaining_capacity <= 0 حُذف من هنا عمداً — كان يتحقق
+        // *بعد* أن ينقصها reserveCapacity() بنفس الحجز الحالي (عبر decrement()
+        // بمقدار quantity)، فيرفض الحجز الذي أنشأه للتو دائماً بمجرد ما تصل
+        // القيمة لصفر. الفحص الصحيح موجود فقط في reserveCapacity() قبل
+        // الـ decrement (نفس نمط الإصلاح الموثّق في ServiceBookingStrategy).
 
         // تحقق: مطابقة التاريخ المرسل مع تاريخ الـ availability في قاعدة البيانات
         $availableDate = $slot->availability->available_date instanceof \Carbon\Carbon 

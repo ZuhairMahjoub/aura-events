@@ -37,6 +37,15 @@ public function getAllListings(
             ->limit(7),
         'variants.availabilities.slots' => fn ($q) => $q
             ->select('id', 'listing_availability_id', 'slot_name', 'start_time', 'end_time', 'remaining_capacity'),
+
+        // ── مكوّنات وفريلانسرز الباقات (Package) ────────────────────────────
+        // يُحمَّل دايماً بغض النظر عن قيمة $type، لأن الاستعلام واحد لكل
+        // الأنواع؛ لو النوع مش package، هاي العلاقات ببساطة بترجع فاضية
+        // بدون أي كلفة إضافية محسوسة (whereHas ما لزم هون لأنه eager load
+        // عادي، مش فلترة).
+        'variants.packageItems.includedVariant.listing',
+        'variants.packageItems.includedVariant.images',
+        'variants.packageFreelancers.freelancer',
     ])
     // Business rule: مفروضة دايماً، مش optional filter
     ->where('moderation_status', 'approved')
