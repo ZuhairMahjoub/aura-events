@@ -5,14 +5,22 @@ namespace App\Http\Controllers;
 use App\Services\JobOfferService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+// 💡 استيراد خدمة الإشعارات
+use App\Services\FirebaseNotificationService;
 
 class AdminJobOfferController extends Controller
 {
     protected JobOfferService $jobOfferService;
+    // 💡 1. تعريف خدمة الإشعارات
+    protected FirebaseNotificationService $notificationService;
 
-    public function __construct(JobOfferService $jobOfferService)
-    {
+    // 💡 تحديث الـ Constructor
+    public function __construct(
+        JobOfferService $jobOfferService,
+        FirebaseNotificationService $notificationService
+    ) {
         $this->jobOfferService = $jobOfferService;
+        $this->notificationService = $notificationService;
     }
 
     public function pendingList(): JsonResponse
@@ -28,6 +36,20 @@ class AdminJobOfferController extends Controller
     public function approve($id): JsonResponse
     {
         $jobOffer = $this->jobOfferService->approveJobOffer($id);
+        
+        // 💡 تحميل المزود للوصول إلى User ID
+        $jobOffer->load('provider');
+
+        // ── 💡 إرسال إشعار الموافقة بالإنجليزية ──
+        $titleEn = is_array($jobOffer->title) ? ($jobOffer->title['en'] ?? current($jobOffer->title)) : $jobOffer->title;
+        $userId = $jobOffer->provider->user_id;
+
+        $this->notificationService->sendToUser(
+            $userId,
+            'Job Offer Approved ✅',
+            "Your job offer '{$titleEn}' has been approved and is now visible to freelancers.",
+            ['type' => 'job_offer_approved', 'job_offer_id' => $jobOffer->id]
+        );
 
         return response()->json([
             'status'  => true,
@@ -43,6 +65,20 @@ class AdminJobOfferController extends Controller
         ]);
 
         $jobOffer = $this->jobOfferService->rejectJobOffer($id, $request->rejection_reason);
+        
+        // 💡 تحميل المزود للوصول إلى User ID
+        $jobOffer->load('provider');
+
+        // ── 💡 إرسال إشعار الرفض بالإنجليزية ──
+        $titleEn = is_array($jobOffer->title) ? ($jobOffer->title['en'] ?? current($jobOffer->title)) : $jobOffer->title;
+        $userId = $jobOffer->provider->user_id;
+
+        $this->notificationService->sendToUser(
+            $userId,
+            'Job Offer Rejected ❌',
+            "Unfortunately, your job offer '{$titleEn}' was rejected. Reason: {$request->rejection_reason}",
+            ['type' => 'job_offer_rejected', 'job_offer_id' => $jobOffer->id]
+        );
 
         return response()->json([
             'status'  => true,
@@ -50,4 +86,4 @@ class AdminJobOfferController extends Controller
             'data'    => $jobOffer,
         ], 200);
     }
-}
+} 

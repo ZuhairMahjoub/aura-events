@@ -14,10 +14,13 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use App\Services\ListingService;
-
+use App\Services\FirebaseNotificationService;
 class ArrangementController extends Controller
 {
-    public function __construct(protected ArrangementService $arrangementService, protected ListingService $listingService) {
+    public function __construct(
+        protected ArrangementService $arrangementService,
+         protected ListingService $listingService,
+         protected FirebaseNotificationService $notificationService ) {
     }
 
     // ────────────────────────────────────────────────────────────────────────────
@@ -44,7 +47,14 @@ class ArrangementController extends Controller
                 $request->validated(),
                 $provider->id
             );
+$titleEn = $arrangement->getTranslation('title', 'en');
 
+            $this->notificationService->sendToUser(
+                $request->user()->id,
+                'Package Submitted Successfully',
+                "Your package '{$titleEn}' has been submitted and is pending admin approval.",
+                ['type' => 'arrangement_added', 'arrangement_id' => $arrangement->id]
+            );
             return response()->json([
                 'success' => true,
                 'message' => 'تم إنشاء الترتيب الجاهز بنجاح وهو قيد المراجعة حالياً.',
@@ -133,7 +143,14 @@ class ArrangementController extends Controller
                 $request->validated(),
                 $provider->id
             );
+$titleEn = $updated->getTranslation('title', 'en');
 
+            $this->notificationService->sendToUser(
+                $request->user()->id,
+                'Package Updated Successfully',
+                "Your package '{$titleEn}' has been updated and will be reviewed by admin.",
+                ['type' => 'arrangement_updated', 'arrangement_id' => $updated->id]
+            );
             return response()->json([
                 'success' => true,
                 'message' => 'تم تحديث الترتيب بنجاح.',
@@ -309,7 +326,7 @@ class ArrangementController extends Controller
             ], 500);
         }
     }
-    public function destroy(string $arrangementId): JsonResponse
+    public function destroy(Request $request,string $arrangementId): JsonResponse
 {
     $arrangement = Listing::where('listing_type', 'package')
         ->findOrFail($arrangementId);
@@ -317,8 +334,14 @@ class ArrangementController extends Controller
     Gate::authorize('delete', $arrangement);
 
     try {
+        $titleEn = $arrangement->getTranslation('title', 'en');
         $this->listingService->deleteListing($arrangement);
-
+$this->notificationService->sendToUser(
+                $request->user()->id,
+                'Package Deleted Successfully',
+                "Your package '{$titleEn}' has been permanently removed from the system.",
+                ['type' => 'arrangement_deleted']
+            );
         return response()->json([
             'success' => true,
             'message' => 'تم حذف الترتيب بنجاح.'
