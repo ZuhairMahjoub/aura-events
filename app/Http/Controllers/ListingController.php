@@ -19,14 +19,21 @@ use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-
+use App\Services\FirebaseNotificationService;
 class ListingController extends Controller
 {
     protected ListingService $listingService;
 
-    public function __construct(ListingService $listingService)
+  protected FirebaseNotificationService $notificationService;
+
+    // 💡 تحديث الـ Constructor لحقن الخدمة
+    public function __construct(
+        ListingService $listingService,
+        FirebaseNotificationService $notificationService
+    )
     {
         $this->listingService = $listingService;
+        $this->notificationService = $notificationService;
     }
     public function getCompanyInventory(Request $request): JsonResponse
     {
@@ -104,8 +111,18 @@ class ListingController extends Controller
     {
         Gate::authorize('create', Listing::class);
 
-        $listing = $this->listingService->createListingWithGraph($request->validated());
+$listing = $this->listingService->createListingWithGraph($request->validated());
 
+        // ── 💡 إرسال إشعار بالإنجليزية (Addition) ──
+        // جلب العنوان بالإنجليزية عبر Spatie
+        $titleEn = $listing->getTranslation('title', 'en'); 
+        
+        $this->notificationService->sendToUser(
+            $request->user()->id,
+            'Listing Submitted Successfully',
+            "Your listing '{$titleEn}' has been submitted and is pending admin approval.",
+            ['type' => 'listing_added', 'listing_id' => $listing->id]
+        );
         return response()->json([
             'success' => true,
             'message' => 'Listing created successfully.',
@@ -133,6 +150,14 @@ class ListingController extends Controller
     {
         $updatedListing = $this->listingService->updateListingWithGraph($listing, $request->validated());
 
+        $titleEn = $updatedListing->getTranslation('title', 'en');
+
+        $this->notificationService->sendToUser(
+            $request->user()->id,
+            'Listing Updated Successfully',
+            "Your listing '{$titleEn}' has been updated and will be reviewed by admin.",
+            ['type' => 'listing_updated', 'listing_id' => $updatedListing->id]
+        );
         return response()->json([
             'message' => 'Hall and its custom packages synchronized successfully!',
             'data'    => new ListingResource($updatedListing)
@@ -141,13 +166,22 @@ class ListingController extends Controller
 
 
 
-    public function destroy(Listing $listing): JsonResponse
+    public function destroy(Request $request,Listing $listing): JsonResponse
     {
         Gate::authorize('delete', $listing);
 
         try {
+     $titleEn = $listing->getTranslation('title', 'en');
+
             $this->listingService->deleteListing($listing);
 
+            // ── 💡 إرسال إشعار بالإنجليزية (Deletion) ──
+            $this->notificationService->sendToUser(
+                $request->user()->id,
+                'Listing Deleted Successfully',
+                "Your listing '{$titleEn}' has been permanently removed from the system.",
+                ['type' => 'listing_deleted']
+            );
             return response()->json([
                 'success' => true,
                 'message' => 'Listing deleted successfully.'
