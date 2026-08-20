@@ -28,7 +28,7 @@ public function getAllListings(
         'provider:id,user_id',
         'district:id,name',
         'images:id,imageable_id,imageable_type,path',
-        'variants' => fn ($q) => $q->select('id', 'listing_id', 'variant_name', 'price', 'currency', 'price_type', 'stock_quantity', 'dynamic_attributes'),
+        'variants' => fn ($q) => $q->select('id', 'listing_id', 'variant_name', 'price', 'currency', 'price_type', 'stock_quantity', 'capacity','dynamic_attributes'),
         'variants.images:id,imageable_id,imageable_type,path',
         'variants.availabilities' => fn ($q) => $q
             ->select('id', 'listing_variant_id', 'available_date', 'is_blocked')
@@ -56,8 +56,8 @@ public function getAllListings(
     ->when($capacityMin || $capacityMax, function ($q) use ($capacityMin, $capacityMax) {
         $q->whereHas('variants', function ($variantQuery) use ($capacityMin, $capacityMax) {
             $variantQuery
-                ->when($capacityMin, fn ($vq) => $vq->where('dynamic_attributes->capacity', '>=', $capacityMin))
-                ->when($capacityMax, fn ($vq) => $vq->where('dynamic_attributes->capacity', '<=', $capacityMax));
+                ->when($capacityMin, fn ($vq) => $vq->where('capacity', '>=', $capacityMin))
+                ->when($capacityMax, fn ($vq) => $vq->where('capacity', '<=', $capacityMax));
         });
     })
 

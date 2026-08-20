@@ -137,8 +137,7 @@ class ListingResource extends JsonResource
         }
 
         return $variants->filter(function ($variant) use ($min, $max) {
-            $capacity = $variant->dynamic_attributes['capacity'] ?? null;
-
+         $capacity = $variant->capacity;  // ✅ صح
             if ($capacity === null) {
                 return false;
             }
