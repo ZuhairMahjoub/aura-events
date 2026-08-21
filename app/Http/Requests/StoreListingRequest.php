@@ -50,7 +50,7 @@ class StoreListingRequest extends FormRequest
             'variants.*.currency'        => ['nullable', 'string', 'max:10'],
             'variants.*.price_type'      => ['nullable', 'string'],
             'variants.*.services'        => ['nullable', 'array'],
-            'variants.*.capacity' => ['required', 'integer', 'min:1'],
+'variants.*.capacity' => ['nullable', 'integer', 'min:1'],
             'images.*'             => ['nullable', 'array'],
             'images.*.id'          => ['nullable', 'string'],
             'images.*.path'        => ['nullable', 'string'],

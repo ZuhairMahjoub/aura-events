@@ -75,7 +75,28 @@ class PackageBookingStrategy implements BookingStrategyInterface
             $requiredQty = $item->quantity * $data->quantity;
 
             if ($type === 'physical_product') {
-                if ($variant->stock_quantity < $requiredQty) {
+                if ($variant->price_type === 'hourly' && $mainSlot) {
+                    // نفس منطق hall/service: نحاول أولاً إيجاد sub-slot بنفس
+                    // تاريخ/وقت الباقة الرئيسي. إذا وُجد، السعة تُفحص عليه
+                    // (مستقل لكل يوم). إذا لم يوجد، fallback لفحص
+                    // stock_quantity مباشرة (نفس سلوك fixed) بدل رفض الحجز
+                    // بالكامل — قرار متعمد لتفادي فرض شرط صارم على مزوّدين
+                    // لم يضيفوا slots لكل تاريخ ممكن.
+                    $subSlotExists = \App\Models\ListingSlot::whereHas('availability', function ($q) use ($variant, $data) {
+                            $q->where('listing_variant_id', $variant->id)
+                              ->where('available_date', $data->bookedDate);
+                        })
+                        ->where('start_time', $mainSlot->getRawOriginal('start_time'))
+                        ->exists();
+
+                    if ($subSlotExists) {
+                        $this->validateSubComponentSlot($variant, $data->bookedDate, $mainSlot, $requiredQty);
+                    } elseif ($variant->stock_quantity < $requiredQty) {
+                        throw ValidationException::withMessages([
+                            'quantity' => "المكون [" . ($variant->variant_name['ar'] ?? $variant->variant_name) . "] غير متوفر بالكمية المطلوبة في المخزون.",
+                        ]);
+                    }
+                } elseif ($variant->stock_quantity < $requiredQty) {
                     throw ValidationException::withMessages([
                         'quantity' => "المكون [" . ($variant->variant_name['ar'] ?? $variant->variant_name) . "] غير متوفر بالكمية المطلوبة في المخزون.",
                     ]);
@@ -137,9 +158,14 @@ class PackageBookingStrategy implements BookingStrategyInterface
         // الجماعي. لو حجزت باقتان متزامنتان نفس مجموعة الـ sub-slots لكن
         // بترتيب items معكوس، يحدث deadlock حقيقي بين الـ transactions.
         // الحل: تحديد كل sub-slot IDs المطلوبة مسبقاً (بدون lock)، ترتيبها،
-        // ثم قفلها دفعة واحدة بنفس ترتيب القفل الجماعي للمنتجات المادية. ──
+        // ثم قفلها دفعة واحدة بنفس ترتيب القفل الجماعي للمنتجات المادية.
+        //
+        // ملاحظة: physical_product بسعر hourly مضاف هنا أيضاً — إذا وُجد
+        // sub-slot بنفس تاريخ/وقت الباقة، يُقفَل ويُخصَم منه (بدل
+        // stock_quantity)، بنفس منطق hall/service بالضبط. ──
         $timeDependentItems = $packageVariant->packageItems
-            ->filter(fn($item) => in_array($item->includedVariant->listing->listing_type, ['hall', 'service']));
+            ->filter(fn($item) => in_array($item->includedVariant->listing->listing_type, ['hall', 'service'])
+                || ($item->includedVariant->listing->listing_type === 'physical_product' && $item->includedVariant->price_type === 'hourly'));
 
         $lockedSubSlots = collect();
 
@@ -172,16 +198,29 @@ class PackageBookingStrategy implements BookingStrategyInterface
             $requiredQty = $item->quantity * $data->quantity;
 
             if ($type === 'physical_product') {
-                $lockedVariant = $lockedVariants->get($variant->id);
+                $isHourlyWithSubSlot = $variant->price_type === 'hourly'
+                    && $mainSlot
+                    && $lockedSubSlots->has($variant->id);
 
-                if (!$lockedVariant || $lockedVariant->stock_quantity < $requiredQty) {
-                    throw ValidationException::withMessages([
-                        'quantity' => "المكون [" . ($variant->variant_name['ar'] ?? '') . "] نفد مخزونه.",
-                    ]);
+                if ($isHourlyWithSubSlot) {
+                    // نفس مسار hall/service: الخصم من remaining_capacity
+                    // الخاص بالـ sub-slot المستقل لهذا اليوم بالذات،
+                    // stock_quantity يبقى ثابتاً مرجعياً ولا يُخصم.
+                    $this->reserveSubComponentSlotFromLocked($variant, $lockedSubSlots, $requiredQty);
+                } else {
+                    // fixed، أو hourly بدون sub-slot متاح بنفس وقت الباقة
+                    // (fallback): الخصم المباشر من stock_quantity.
+                    $lockedVariant = $lockedVariants->get($variant->id);
+
+                    if (!$lockedVariant || $lockedVariant->stock_quantity < $requiredQty) {
+                        throw ValidationException::withMessages([
+                            'quantity' => "المكون [" . ($variant->variant_name['ar'] ?? '') . "] نفد مخزونه.",
+                        ]);
+                    }
+
+                    // تحديث مباشر على الـ instance المُقفَل (لا re-fetch)
+                    $lockedVariant->decrement('stock_quantity', $requiredQty);
                 }
-
-                // تحديث مباشر على الـ instance المُقفَل (لا re-fetch)
-                $lockedVariant->decrement('stock_quantity', $requiredQty);
 
             } elseif (in_array($type, ['hall', 'service']) && $mainSlot) {
                 $this->reserveSubComponentSlotFromLocked($variant, $lockedSubSlots, $requiredQty);
@@ -237,14 +276,39 @@ class PackageBookingStrategy implements BookingStrategyInterface
             'packageFreelancers.freelancer',
         ])->find($data->variantId);
 
-        $items = $packageVariant->packageItems->map(fn($item) => [
-            'type'               => 'item',
-            'listing_variant_id' => $item->included_variant_id,
-            'item_name'          => $item->includedVariant->variant_name,
-            'quantity'           => $item->quantity * $data->quantity,
-            'price_at_booking'   => $item->includedVariant->price,
-            'is_time_dependent'  => in_array($item->includedVariant->listing->listing_type, ['hall', 'service']),
-        ])->toArray();
+        $mainSlot = $data->slotId ? ListingSlot::find($data->slotId) : null;
+
+        $items = $packageVariant->packageItems->map(function ($item) use ($data, $mainSlot) {
+            $variant = $item->includedVariant;
+            $type    = $variant->listing->listing_type;
+            $isTimeDependent = in_array($type, ['hall', 'service']);
+
+            // لمكوّن physical_product بسعر hourly، نحدد أي sub-slot انخصم
+            // منه فعلياً (نفس الفحص المستخدم في reserveCapacity) — عشان
+            // release() يرجع للمكان الصحيح بالضبط بدل التخمين.
+            $usedSlotId = null;
+            if ($type === 'physical_product' && $variant->price_type === 'hourly' && $mainSlot) {
+                $usedSlotId = ListingSlot::whereHas('availability', function ($q) use ($variant, $data) {
+                        $q->where('listing_variant_id', $variant->id)
+                          ->where('available_date', $data->bookedDate);
+                    })
+                    ->where('start_time', $mainSlot->getRawOriginal('start_time'))
+                    ->value('id');
+            }
+
+            return [
+                'type'               => 'item',
+                'listing_variant_id' => $item->included_variant_id,
+                'item_name'          => $variant->variant_name,
+                'quantity'           => $item->quantity * $data->quantity,
+                'price_at_booking'   => $variant->price,
+                'is_time_dependent'  => $isTimeDependent,
+                // slot_id الفعلي الذي خُصم منه هذا المكوّن (hall/service
+                // دائماً، physical_product/hourly فقط إذا وُجد sub-slot،
+                // null يعني تم الخصم من stock_quantity مباشرة).
+                'used_slot_id'       => $isTimeDependent ? $data->slotId : $usedSlotId,
+            ];
+        })->toArray();
 
         return [
             'is_coordination_package' => true,
@@ -343,6 +407,13 @@ class PackageBookingStrategy implements BookingStrategyInterface
      * metadata->booking_items وقت الحجز (وليس إعادة جلب packageItems
      * الحالية) لأن مكوّنات الباقة قد تتغيّر لاحقاً عبر SyncPackageItemsAction؛
      * يجب إعادة بالضبط ما خُصم وقتها، لا ما هو موجود بالباقة الآن.
+     *
+     * كل عنصر بالـ snapshot يحمل used_slot_id صريحاً (مُحدَّد وقت الحجز في
+     * buildTypeMetadata): إذا موجود، الإرجاع لـ remaining_capacity لذلك
+     * الـ slot بالذات (hall/service دائماً، physical_product/hourly إذا
+     * وُجد sub-slot وقتها). إذا null، الإرجاع لـ stock_quantity مباشرة
+     * (physical_product/fixed، أو hourly بدون sub-slot متاح وقتها — نفس
+     * المسار الذي استُخدم في reserveCapacity وقتها بالضبط).
      */
     public function release(Booking $booking): void
     {
@@ -363,49 +434,40 @@ class PackageBookingStrategy implements BookingStrategyInterface
             ->get()
             ->keyBy('id');
 
-        $timeDependentVariantIds = $bookingItems
-            ->filter(fn($entry) => !empty($entry['is_time_dependent']))
-            ->pluck('listing_variant_id')
-            ->unique()
-            ->values();
+        // Lock جماعي مرتَّب لكل الـ slots المخزَّنة صراحة في used_slot_id
+        // (بدل إعادة اشتقاقها من التاريخ/الوقت — أدق وأضمن ضد أي تغيير
+        // لاحق على بيانات الـ availabilities/slots).
+        $slotIds = $bookingItems->pluck('used_slot_id')->filter()->unique()->sort()->values()->toArray();
 
-        $lockedSubSlots = collect();
-
-        if ($booking->listing_slot_id && $timeDependentVariantIds->isNotEmpty()) {
-            $subSlotIds = ListingSlot::whereHas('availability', function ($q) use ($timeDependentVariantIds, $booking) {
-                    $q->whereIn('listing_variant_id', $timeDependentVariantIds)
-                      ->where('available_date', $booking->booked_date);
-                })
-                ->where('start_time', $booking->getRawOriginal('booked_start_time'))
-                ->pluck('id')
-                ->sort()
-                ->values()
-                ->toArray();
-
-            if (!empty($subSlotIds)) {
-                $lockedSubSlots = ListingSlot::whereIn('id', $subSlotIds)
-                    ->with('availability:id,listing_variant_id')
-                    ->lockForUpdate()
-                    ->orderBy('id')
-                    ->get()
-                    ->keyBy(fn($slot) => $slot->availability->listing_variant_id);
-            }
+        $lockedSlots = collect();
+        if (! empty($slotIds)) {
+            $lockedSlots = ListingSlot::whereIn('id', $slotIds)
+                ->lockForUpdate()
+                ->orderBy('id')
+                ->get()
+                ->keyBy('id');
         }
 
         foreach ($bookingItems as $entry) {
-            $variant = $variants->get($entry['listing_variant_id']);
+            $quantity   = (int) ($entry['quantity'] ?? 0);
+            $usedSlotId = $entry['used_slot_id'] ?? null;
 
-            // المكوّن محذوف نهائياً من قاعدة البيانات؛ لا يوجد إليه شيء يُعاد.
+            // مسار الـ slot لا يعتمد على وجود الـ variant حالياً — الـ slot
+            // نفسه هو الذي خُصم منه، ويبقى صالحاً للإرجاع حتى لو حُذف الـ
+            // variant لاحقاً (أو تغيّرت مكوناته عبر SyncPackageItemsAction).
+            if ($usedSlotId && $lockedSlots->has($usedSlotId)) {
+                $lockedSlots->get($usedSlotId)->increment('remaining_capacity', $quantity);
+                continue;
+            }
+
+            // مسار stock_quantity: يحتاج الـ variant لا يزال موجوداً.
+            $variant = $variants->get($entry['listing_variant_id']);
             if (!$variant) {
                 continue;
             }
 
-            $quantity = (int) ($entry['quantity'] ?? 0);
-
             if ($variant->listing?->listing_type === 'physical_product') {
                 $variant->increment('stock_quantity', $quantity);
-            } elseif (!empty($entry['is_time_dependent'])) {
-                $lockedSubSlots->get($variant->id)?->increment('remaining_capacity', $quantity);
             }
         }
     }

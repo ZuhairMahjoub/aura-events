@@ -28,7 +28,48 @@ class BookingService
      * 2026_07_01_000001_fix_bookings_table_columns (إصلاح الخطأ ب).
      */
     private const VALID_CANCELLERS = ['organizer', 'provider', 'admin', 'system'];
-
+ public function expireUnpaidAcceptedBookings(): int
+    {
+        $staleBookingIds = Booking::where('status', 'accepted')
+            ->whereNotNull('payment_due_at')
+            ->where('payment_due_at', '<', now())
+            ->pluck('id');
+ 
+        $expiredCount = 0;
+ 
+        foreach ($staleBookingIds as $bookingId) {
+            DB::transaction(function () use ($bookingId, &$expiredCount) {
+                $booking = Booking::lockForUpdate()->find($bookingId);
+ 
+                // إعادة الفحص جوا القفل: ممكن العميل يكون دفع بالضبط قبل ما
+                // توصل هالتشغيلة - فما لازم نلغيها بالغلط.
+                if (! $booking || $booking->status !== 'accepted' || ! $booking->payment_due_at || $booking->payment_due_at->isFuture()) {
+                    return;
+                }
+ 
+                $previousStatus = $booking->status;
+ 
+                $this->releaseCapacity($booking);
+                $this->releaseFreelancerDateIfApplicable($booking);
+ 
+                $booking->update([
+                    'status'              => 'cancelled',
+                    'cancelled_at'        => now(),
+                    'cancelled_by'        => 'system',
+                    'cancellation_reason' => 'انتهت مهلة الدفع (' . config('booking.payment_timeout_hours') . ' ساعة) بعد قبول المزوّد دون تأكيد الدفع.',
+                    'payment_due_at'      => null,
+                ]);
+ 
+                $this->logTransition($booking, $previousStatus, 'cancelled', 'system', null, 'إلغاء تلقائي لعدم الدفع بعد القبول');
+ 
+                DB::afterCommit(fn () => event(new BookingCancelled($booking)));
+ 
+                $expiredCount++;
+            });
+        }
+ 
+        return $expiredCount;
+    }
     public function book(BookingData $data): Booking
     {
 
@@ -156,7 +197,7 @@ class BookingService
 
                 $this->logTransition($booking, $previousStatus, 'expired', 'system', null, 'انتهاء المهلة تلقائياً');
 
-                DB::afterCommit(fn () => event(new \App\Events\BookingExpired($booking)));
+                DB::afterCommit(fn() => event(new \App\Events\BookingExpired($booking)));
 
                 $expiredCount++;
             });
@@ -268,6 +309,7 @@ class BookingService
                 'status'            => 'confirmed',
                 'payment_status'    => 'paid',
                 'payment_reference' => $paymentReference,
+                'payment_due_at'    => null,   // ← أضف هذا: الدفع صار، ما عاد في مهلة
             ]);
 
             $this->logTransition($booking, $previousStatus, 'confirmed', 'system', null, 'Payment confirmed');
@@ -329,7 +371,19 @@ class BookingService
             }
 
             $previousStatus = $booking->status;
-            $booking->update(['status' => 'accepted', 'pending_expires_at' => null]);
+
+            // لو الحجز فيه مبلغ فعلي مطلوب دفعه، حدد مهلة الدفع من لحظة
+            // القبول - لو انتهت بدون دفع، bookings:expire-unpaid-accepted
+            // بيلغيه تلقائياً.
+            $paymentDueAt = (float) $booking->total_price > 0
+                ? now()->addHours(config('booking.payment_timeout_hours'))
+                : null;
+
+            $booking->update([
+                'status'             => 'accepted',
+                'pending_expires_at' => null,
+                'payment_due_at'     => $paymentDueAt,
+            ]);
 
             $this->logTransition($booking, $previousStatus, 'accepted', 'provider', null);
 
@@ -345,69 +399,33 @@ class BookingService
      * الخطوة 6: عند قبول حجز لفريلانسر، نحجز تاريخه تلقائياً بروزنامته
      * (source = booking) حتى ينمنع تعارضه بأي تنسيق آخر بنفس اليوم.
      */
-  private function blockFreelancerDateIfApplicable(Booking $booking): void
-{
-    // ⚠️ إصلاح Bug #4.3: حجز من نوع 'package' لا يخص فريلانسر واحد مباشرة —
-    // provider_id هون هو الشركة (صاحبة الـ Listing)، فالفحص القديم
-    // ($booking->provider->provider_type !== 'freelancer') كان يرجع فوراً
-    // ويتجاهل بالكامل أي فريلانسر مشارك جوا package_freelancers، فروزنامتهم
-    // الشخصية ما كانت تنحجز إطلاقاً رغم التزامهم الفعلي بهاد اليوم.
-    if ($booking->booking_type === 'package') {
-        $this->blockPackageFreelancersDate($booking);
-        return;
-    }
+    private function blockFreelancerDateIfApplicable(Booking $booking): void
+    {
+        // ⚠️ إصلاح Bug #4.3: حجز من نوع 'package' لا يخص فريلانسر واحد مباشرة —
+        // provider_id هون هو الشركة (صاحبة الـ Listing)، فالفحص القديم
+        // ($booking->provider->provider_type !== 'freelancer') كان يرجع فوراً
+        // ويتجاهل بالكامل أي فريلانسر مشارك جوا package_freelancers، فروزنامتهم
+        // الشخصية ما كانت تنحجز إطلاقاً رغم التزامهم الفعلي بهاد اليوم.
+        if ($booking->booking_type === 'package') {
+            $this->blockPackageFreelancersDate($booking);
+            return;
+        }
 
-    if ($booking->provider?->provider_type !== 'freelancer') {
-        return;
-    }
+        if ($booking->provider?->provider_type !== 'freelancer') {
+            return;
+        }
 
-    $startTime = $booking->booked_start_time;
-    $endTime   = $booking->booked_end_time;
+        $startTime = $booking->booked_start_time;
+        $endTime   = $booking->booked_end_time;
 
-    if (FreelancerBlockedDate::hasConflict($booking->provider_id, $booking->booked_date, $startTime, $endTime)) {
-        throw new \DomainException(
-            'هذا الفريلانسر لديه حجز أو حظر متعارض بنفس التاريخ والوقت بالفعل.'
-        );
-    }
-
-    FreelancerBlockedDate::create([
-        'freelancer_id' => $booking->provider_id,
-        'blocked_date'  => $booking->booked_date,
-        'start_time'    => $startTime,
-        'end_time'      => $endTime,
-        'source'        => 'booking',
-        'booking_id'    => $booking->id,
-    ]);
-}
-
-/**
- * يحجز روزنامة كل فريلانسر مشارك فعلياً بالباقة (package_freelancers تبع
- * الـ variant المحجوز)، بنفس منطق الفحص/الحجز المستخدم للحجز المباشر —
- * فحص تعارض لكل واحد فيهم أولاً (كلهم قبل أي إنشاء، لضمان عدم حجز جزئي لو
- * فشل واحد بالنص)، ثم حجزهم كلهم دفعة وحدة لو ما في أي تعارض.
- */
-private function blockPackageFreelancersDate(Booking $booking): void
-{
-    $packageFreelancers = $booking->variant()->with('packageFreelancers')->first()?->packageFreelancers ?? collect();
-
-    if ($packageFreelancers->isEmpty()) {
-        return;
-    }
-
-    $startTime = $booking->booked_start_time;
-    $endTime   = $booking->booked_end_time;
-
-    foreach ($packageFreelancers as $packageFreelancer) {
-        if (FreelancerBlockedDate::hasConflict($packageFreelancer->freelancer_id, $booking->booked_date, $startTime, $endTime)) {
+        if (FreelancerBlockedDate::hasConflict($booking->provider_id, $booking->booked_date, $startTime, $endTime)) {
             throw new \DomainException(
-                'أحد الفريلانسرز المشاركين بهذه الباقة لديه حجز أو حظر متعارض بنفس التاريخ والوقت بالفعل.'
+                'هذا الفريلانسر لديه حجز أو حظر متعارض بنفس التاريخ والوقت بالفعل.'
             );
         }
-    }
 
-    foreach ($packageFreelancers as $packageFreelancer) {
         FreelancerBlockedDate::create([
-            'freelancer_id' => $packageFreelancer->freelancer_id,
+            'freelancer_id' => $booking->provider_id,
             'blocked_date'  => $booking->booked_date,
             'start_time'    => $startTime,
             'end_time'      => $endTime,
@@ -415,7 +433,43 @@ private function blockPackageFreelancersDate(Booking $booking): void
             'booking_id'    => $booking->id,
         ]);
     }
-}
+
+    /**
+     * يحجز روزنامة كل فريلانسر مشارك فعلياً بالباقة (package_freelancers تبع
+     * الـ variant المحجوز)، بنفس منطق الفحص/الحجز المستخدم للحجز المباشر —
+     * فحص تعارض لكل واحد فيهم أولاً (كلهم قبل أي إنشاء، لضمان عدم حجز جزئي لو
+     * فشل واحد بالنص)، ثم حجزهم كلهم دفعة وحدة لو ما في أي تعارض.
+     */
+    private function blockPackageFreelancersDate(Booking $booking): void
+    {
+        $packageFreelancers = $booking->variant()->with('packageFreelancers')->first()?->packageFreelancers ?? collect();
+
+        if ($packageFreelancers->isEmpty()) {
+            return;
+        }
+
+        $startTime = $booking->booked_start_time;
+        $endTime   = $booking->booked_end_time;
+
+        foreach ($packageFreelancers as $packageFreelancer) {
+            if (FreelancerBlockedDate::hasConflict($packageFreelancer->freelancer_id, $booking->booked_date, $startTime, $endTime)) {
+                throw new \DomainException(
+                    'أحد الفريلانسرز المشاركين بهذه الباقة لديه حجز أو حظر متعارض بنفس التاريخ والوقت بالفعل.'
+                );
+            }
+        }
+
+        foreach ($packageFreelancers as $packageFreelancer) {
+            FreelancerBlockedDate::create([
+                'freelancer_id' => $packageFreelancer->freelancer_id,
+                'blocked_date'  => $booking->booked_date,
+                'start_time'    => $startTime,
+                'end_time'      => $endTime,
+                'source'        => 'booking',
+                'booking_id'    => $booking->id,
+            ]);
+        }
+    }
     /**
      * الخطوة 6: عند رفض/إلغاء حجز فريلانسر، نحرر تاريخه من الروزنامة
      * (فقط التواريخ التي حجزها هذا الحجز تحديداً عبر booking_id).

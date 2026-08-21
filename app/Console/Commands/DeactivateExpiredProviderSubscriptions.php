@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Provider;
+use App\Models\ProviderSubscription;
 use Illuminate\Console\Command;
 
 class DeactivateExpiredProviderSubscriptions extends Command
@@ -13,13 +14,18 @@ class DeactivateExpiredProviderSubscriptions extends Command
 
     public function handle(): void
     {
-        // مزوّد نشط حالياً، وآخر فترة اشتراك له انتهت (current_period_ends_at
-        // < اليوم)، ولا يوجد فترة أحدث مفتوحة بعدها.
+        // ملاحظة: whereHas() لا يعمل بشكل موثوق مع علاقات latestOfMany/ofMany
+        // (محدودية موثّقة رسمياً بـ Laravel)، لذلك نحسب "آخر فترة اشتراك"
+        // مباشرة عبر GROUP BY + MAX بدل الاعتماد على علاقة latestSubscription.
+        $expiredProviderIds = ProviderSubscription::query()
+            ->selectRaw('provider_id, MAX(current_period_ends_at) as latest_ends_at')
+            ->groupBy('provider_id')
+            ->havingRaw('MAX(current_period_ends_at) < ?', [now()->toDateString()])
+            ->pluck('provider_id');
+
         $providers = Provider::query()
             ->where('is_active', true)
-            ->whereHas('latestSubscription', function ($q) {
-                $q->where('current_period_ends_at', '<', now()->toDateString());
-            })
+            ->whereIn('id', $expiredProviderIds)
             ->get();
 
         $count = 0;

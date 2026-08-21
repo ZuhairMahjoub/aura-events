@@ -29,6 +29,14 @@ class EnsureUserIsApprovedProvider
              ], Response::HTTP_FORBIDDEN); 
          }
 
+         if (! $user->providerProfile->hasAcceptedPolicy()) {
+             return response()->json([
+                 'success' => false,
+                 'message' => 'يجب الموافقة على سياسة المنصة أولاً قبل المتابعة.',
+                 'error_code' => 'POLICY_NOT_ACCEPTED',
+             ], Response::HTTP_FORBIDDEN);
+         }
+
         return $next($request);
     }
 }
