@@ -16,6 +16,13 @@ readonly class BookingData
 
     public static function fromRequest(array $validated, string $userId): self
     {
+        $metadata = $validated['metadata'] ?? [];
+        if (isset($validated['custom_items'])) {
+            $metadata['custom_items'] = $validated['custom_items'];
+        }
+if (isset($validated['custom_freelancers'])) {
+    $metadata['custom_freelancers'] = $validated['custom_freelancers'];
+}
         return new self(
             userId:         $userId,
             listingId:      $validated['listing_id'],
@@ -23,7 +30,7 @@ readonly class BookingData
             slotId:         $validated['listing_slot_id'] ?? null,
             bookedDate:     $validated['booked_date'] ?? null,
             quantity:       $validated['quantity'] ?? 1,
-            metadata:       $validated['metadata'] ?? [],
+            metadata:       $metadata,
             customerNotes:  $validated['customer_notes'] ?? null,
         );
     }

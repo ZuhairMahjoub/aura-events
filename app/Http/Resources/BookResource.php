@@ -10,9 +10,6 @@ class BookResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        // نخزّن العلاقات بمتغيرات محلية مرة وحدة، بدل ما نستدعي
-        // $this->listing / $this->variant عدة مرات (كل استدعاء لـ magic
-        // property بيعمل property_exists + method_exists check إضافي).
         $listing     = $this->listing;
         $variant     = $this->variant;
         $listingType = $listing->listing_type ?? $this->booking_type ?? 'unknown';
@@ -24,15 +21,15 @@ class BookResource extends JsonResource
             'price'    => $this->total_price ?? ($variant->price ?? 0),
             'currency' => $variant->currency ?? 'USD',
 
-            // جدول اليوم المحجوز فيه بالكامل: التاريخ + كل الـ shifts
-            // (slots) المتاحة لنفس الـ variant بنفس اليوم، مع تحديد أيهم
-            // هو الـ shift المحجوز فعلياً بهذا الحجز (is_booked).
             'day_schedule' => $this->buildDaySchedule($variant),
 
             'provider_id' => $this->provider_id,
             'booked_date' => $this->booked_date,
             'quantity'    => $this->quantity ?? 1,
-
+            
+            // 🚀 التعديلات المطلوبة للرياكت
+            'metadata'    => $this->metadata,
+'payment_id' => $this->relationLoaded('payments') ? $this->payments->last()?->id : null,
             'customer' => $this->whenLoaded('user', fn () => $this->user ? [
                 'id'             => $this->user->id,
                 'name'           => trim(($this->user->first_name ?? '') . ' ' . ($this->user->last_name ?? '')) ?: 'غير معروف',
@@ -46,22 +43,12 @@ class BookResource extends JsonResource
                 'phone' => '', 'phone_verified' => false, 'email' => '', 'email_verified' => false,
             ]),
 
-            // العرض المحجوز بالكامل (Listing + Variant)، مفلتر حسب النوع.
             'listing' => $listing ? $this->buildListingDetails($listing, $variant, $listingType) : null,
-
-            // ما طلبه الزبون فعلياً وقت الحجز (event_type, guest_count, delivery_address...)
 
             'created_at_human' => $this->created_at?->diffForHumans() ?? '',
         ];
     }
 
-    /**
-     * يبني جدول اليوم كامل: التاريخ المحجوز (booked_date) مع كل الـ shifts
-     * (ListingSlot) المتاحة لنفس اليوم على نفس الـ variant، عبر
-     * ListingAvailability (variant_id + available_date) → slots.
-     * كل shift بيترجع مع remaining_capacity وعلامة is_booked توضح إذا
-     * هو الشيفت المحجوز فعلياً بهذا السجل أو مجرد شيفت متاح آخر بنفس اليوم.
-     */
     protected function buildDaySchedule($variant): array
     {
         if (!$variant || !$this->booked_date) {
@@ -106,7 +93,6 @@ class BookResource extends JsonResource
             'listing_type'                => $listingType,
             'category_id'                 => $listing->category_id,
             'district_id'                 => $listing->district_id,
-            // material_composition: حقل خاص بـ physical_product فقط حسب StoreListingRequest
             'material_composition'        => $listingType === 'physical_product' ? $listing->material_composition : null,
             'is_provider_location_based'  => $listing->is_provider_location_based,
             'secondary_contact_number'    => $listing->secondary_contact_number,
@@ -130,19 +116,7 @@ class BookResource extends JsonResource
         ];
     }
 
-    /**
-     * تفاصيل الـ variant، مبنية حصراً على ما يفرضه StoreListingRequest فعلياً
-     * لكل نوع listing_type وقت الرفع:
-     * - physical_product: stock_quantity إلزامي، capacity غير مستخدم
-     * - service/hall/package: capacity اختياري، stock_quantity غير مستخدم
-     *
-     * ملاحظة: dynamic_attributes موجود كعمود بقاعدة البيانات لكنه غير
-     * مستخدم إطلاقاً في StoreListingRequest/ListingController حالياً (لا
-     * يوجد حقل color أو أي خاصية إضافية يتم إرسالها أو حفظها وقت رفع
-     * العرض). نعرضه هنا فقط لأنه العمود الوحيد المتاح لهذا الغرض، وسيبقى
-     * null دائماً حتى تتم إضافته فعلياً لمسار الرفع.
-     */
-    protected function buildVariantDetails($variant, ?string $listingType): array
+   protected function buildVariantDetails($variant, ?string $listingType): array
     {
         $base = [
             'id'                 => $variant->id,
@@ -153,34 +127,55 @@ class BookResource extends JsonResource
             'dynamic_attributes' => $variant->dynamic_attributes,
         ];
 
-        return match ($listingType) {
-            'hall', 'service', 'package' => $base + ['capacity' => $variant->capacity],
+        // إذا لم يكن باقة، نرجع البيانات العادية
+        if ($listingType !== 'package') {
+            return match ($listingType) {
+                'hall', 'service' => $base + ['capacity' => $variant->capacity],
+                'physical_product' => $base + ['stock_quantity' => $variant->stock_quantity],
+                default => $base,
+            };
+        }
 
-            'physical_product' => $base + ['stock_quantity' => $variant->stock_quantity],
+        // 🚀 معالجة الباقة (Package) وإجبار لارافيل على جلب صور المنتجات الفرعية
+        $items = [];
+       if ($variant->relationLoaded('packageItems')) {
+            $items = $variant->packageItems->map(function ($item) {
+                // 🚀 استعلام مباشر لضمان جلب صورة المنتج المضمن (الكرسي) وليس التنسيق!
+                $productListing = $item->includedVariant?->listing;
+                $imageUrl = null;
+                
+                if ($productListing) {
+                    $image = $productListing->images()->first();
+                    $imageUrl = $image ? $image->full_url : null;
+                }
 
-            default => $base,
-        } + ($listingType === 'package' ? [
-            'items' => $variant->relationLoaded('packageItems')
-                ? $variant->packageItems->map(fn ($item) => [
+                return [
                     'id'                  => $item->id,
                     'included_variant_id' => $item->included_variant_id,
                     'item_name'           => $item->includedVariant->variant_name ?? null,
+                    'image'               => $imageUrl, // 🚀 سيضع رابط صورة الكرسي هنا
                     'quantity'            => $item->quantity,
                     'metadata'            => $item->metadata,
-                ])->values()->all()
-                : [],
+                ];
+            })->values()->all();
+        }
 
-            'freelancers' => $variant->relationLoaded('packageFreelancers')
-                ? $variant->packageFreelancers->map(fn ($f) => [
-                    'id'            => $f->id,
-                    'freelancer_id' => $f->freelancer_id,
-                    'name'          => $f->freelancer->brand_name ?? null,
-                    'contract_id'   => $f->contract_id,
-                ])->values()->all()
-                : [],
-        ] : []);
+        $freelancers = [];
+        if ($variant->relationLoaded('packageFreelancers')) {
+            $freelancers = $variant->packageFreelancers->map(fn ($f) => [
+                'id'            => $f->id,
+                'freelancer_id' => $f->freelancer_id,
+                'name'          => $f->freelancer->brand_name ?? null,
+                'contract_id'   => $f->contract_id,
+            ])->values()->all();
+        }
+
+        return $base + [
+            'capacity'    => $variant->capacity,
+            'items'       => $items,
+            'freelancers' => $freelancers,
+        ];
     }
-
     protected function buildOrderDetails(?string $listingType): ?array
     {
         $metadata = $this->metadata ?? [];
@@ -191,18 +186,15 @@ class BookResource extends JsonResource
                 'guest_count' => $metadata['guest_count'] ?? null,
                 'setup_needs' => $metadata['setup_needs'] ?? null,
             ],
-
             'physical_product' => [
                 'is_rental'        => $metadata['is_rental'] ?? false,
                 'rental_days'      => $metadata['rental_days'] ?? null,
                 'delivery_address' => $metadata['delivery_address'] ?? null,
             ],
-
             'package' => [
                 'is_coordination_package' => $metadata['is_coordination_package'] ?? true,
                 'booking_items'           => $metadata['booking_items'] ?? [],
             ],
-
             default => $metadata ?: null,
         };
     }

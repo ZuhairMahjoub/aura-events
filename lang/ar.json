@@ -34,7 +34,15 @@
 "notif_booking_confirmed_provider_body": "تم تأكيد الحجز الخاص بك رسمياً.",
 
 "notif_booking_completed_provider_title": "اكتملت الخدمة ✅",
-"notif_booking_completed_provider_body": "تم تسجيل اكتمال الخدمة بنجاح."
+"notif_booking_completed_provider_body": "تم تسجيل اكتمال الخدمة بنجاح.",
+"notif_booking_cancelled_confirmation_title": "تم إلغاء الحجز",
+"notif_booking_cancelled_confirmation_body": "قمت بإلغاء الحجز رقم :id بنجاح.",
+
+"notif_booking_cancelled_provider_title": "تم إلغاء الحجز",
+"notif_booking_cancelled_provider_body": "قام العميل بإلغاء الحجز رقم :id.",
+
+"notif_booking_cancelled_confirmation_provider_title": "تم إلغاء الحجز",
+"notif_booking_cancelled_confirmation_provider_body": "قمت بإلغاء الحجز رقم :id بنجاح."
 
 
 }

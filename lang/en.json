@@ -35,5 +35,13 @@
 "notif_booking_confirmed_provider_body": "This booking has been officially confirmed.",
 
 "notif_booking_completed_provider_title": "Service Completed ✅",
-"notif_booking_completed_provider_body": "The service has been marked as completed successfully."
+"notif_booking_completed_provider_body": "The service has been marked as completed successfully.",
+"notif_booking_cancelled_confirmation_title": "Booking Cancelled",
+"notif_booking_cancelled_confirmation_body": "You have successfully cancelled booking #:id.",
+
+"notif_booking_cancelled_provider_title": "Booking Cancelled",
+"notif_booking_cancelled_provider_body": "The client has cancelled booking #:id.",
+
+"notif_booking_cancelled_confirmation_provider_title": "Booking Cancelled",
+"notif_booking_cancelled_confirmation_provider_body": "You have successfully cancelled booking #:id."
 }

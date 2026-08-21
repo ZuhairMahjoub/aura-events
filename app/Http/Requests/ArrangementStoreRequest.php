@@ -43,7 +43,7 @@ class ArrangementStoreRequest extends FormRequest
             // Each item is a ListingVariant belonging to the company.
             'items'              => 'nullable|array|min:1|max:100',
             'items.*.variant_id' => 'required_with:items|string|exists:listing_variants,id',
-            'items.*.quantity'   => 'required_with:items|integer|min:1|max:1000',
+            'items.*.quantity'   => 'required_with:items|integer|min:1|max:10000',
 
             // ── Contract-linked freelancers ───────────────────────────────────
             // Freelancers added via their employment contract with the company.

@@ -183,71 +183,86 @@ class BookingController extends Controller
     }
 
     public function complete(string $bookingId): JsonResponse
-    {
-        $booking = Booking::findOrFail($bookingId);
-        Gate::authorize('complete', $booking);
+{
+    $booking = Booking::findOrFail($bookingId);
+    Gate::authorize('complete', $booking);
 
-        $booking = $this->bookingService->complete($bookingId);
+    $booking = $this->bookingService->complete($bookingId);
 
-        // 1) للمستخدم: تم إتمام الخدمة
+    // 1) للمستخدم: تم إتمام الخدمة
+    $this->notifyUser(
+        $booking,
+        __('notif_booking_completed_title'),
+        __('notif_booking_completed_body'),
+        ['action' => 'booking_completed']
+    );
+
+    // 2) لمزود الخدمة: تأكيد إتمام الخدمة
+    $this->notifyProvider(
+        $booking,
+        __('notif_booking_completed_provider_title'),
+        __('notif_booking_completed_provider_body'),
+        ['action' => 'booking_completed_provider']
+    );
+
+    return response()->json([
+        'success' => true,
+        'message' => 'تم تغيير حالة الحجز إلى مكتمل بنجاح.',
+        'data'    => $booking,
+    ]);
+}
+   public function cancel(Request $request, string $bookingId): JsonResponse
+{
+    $booking = Booking::findOrFail($bookingId);
+    Gate::authorize('cancel', $booking);
+
+    $cancelledBy = $request->user()->hasRole('provider') ? 'provider' : 'organizer';
+
+    $booking = $this->bookingService->cancel(
+        $bookingId,
+        $cancelledBy,
+        $request->input('reason')
+    );
+
+    if ($cancelledBy === 'organizer') {
+        // 1) تأكيد للمستخدم إنه هو يلي ألغى
         $this->notifyUser(
             $booking,
-            __('notif_booking_completed_title'),
-            __('notif_booking_completed_body'),
-            ['action' => 'booking_completed']
+            __('notif_booking_cancelled_by_you_title'),
+            __('notif_booking_cancelled_by_you_body', ['id' => $booking->id]),
+            ['action' => 'booking_cancelled_confirmation']
         );
 
-        // 2) لمزود الخدمة: تأكيد إتمام الخدمة
+        // 2) إشعار للـ provider إنه الحجز انلغى
         $this->notifyProvider(
             $booking,
-            __('notif_booking_completed_provider_title'),
-            __('notif_booking_completed_provider_body'),
-            ['action' => 'booking_completed_provider']
+            __('notif_booking_cancelled_title'),
+            __('notif_booking_cancelled_body', ['id' => $booking->id]),
+            ['action' => 'booking_cancelled']
+        );
+    } else {
+        // 1) إشعار للمستخدم إنه الحجز انلغى من طرف الـ provider
+        $this->notifyUser(
+            $booking,
+            __('notif_booking_cancelled_title'),
+            __('notif_booking_cancelled_body', ['id' => $booking->id]),
+            ['action' => 'booking_cancelled']
         );
 
-        return response()->json([
-            'success' => true,
-            'message' => 'تم تغيير حالة الحجز إلى مكتمل بنجاح.',
-            'data'    => $booking,
-        ]);
-    }
-
-    public function cancel(Request $request, string $bookingId): JsonResponse
-    {
-        $booking = Booking::findOrFail($bookingId);
-        Gate::authorize('cancel', $booking);
-
-        $cancelledBy = $request->user()->hasRole('provider') ? 'provider' : 'organizer';
-
-        $booking = $this->bookingService->cancel(
-            $bookingId,
-            $cancelledBy,
-            $request->input('reason')
+        // 2) تأكيد للـ provider إنه هو يلي ألغى
+        $this->notifyProvider(
+            $booking,
+            __('notif_booking_cancelled_by_you_title'),
+            __('notif_booking_cancelled_by_you_body', ['id' => $booking->id]),
+            ['action' => 'booking_cancelled_confirmation']
         );
-
-        // الطرف يلي ألغى ما بينشعر لحاله، بس الطرف التاني
-        if ($cancelledBy === 'organizer') {
-            $this->notifyProvider(
-                $booking,
-                __('notif_booking_cancelled_title'),
-                __('notif_booking_cancelled_body', ['id' => $booking->id]),
-                ['action' => 'booking_cancelled']
-            );
-        } else {
-            $this->notifyUser(
-                $booking,
-                __('notif_booking_cancelled_title'),
-                __('notif_booking_cancelled_body', ['id' => $booking->id]),
-                ['action' => 'booking_cancelled']
-            );
-        }
-
-        return response()->json([
-            'message' => 'تم إلغاء الحجز.',
-            'data'    => $booking,
-        ]);
     }
 
+    return response()->json([
+        'message' => 'تم إلغاء الحجز.',
+        'data'    => $booking,
+    ]);
+}
     /**
      * =========================================================
      *  READ / LISTING ACTIONS (بدون تعديل منطقي)
@@ -292,7 +307,7 @@ class BookingController extends Controller
             $filters,
             $request->input('per_page', 15)
         );
-
+$bookings->load(['listing.images', 'variant.packageItems.includedVariant.listing.images', 'variant.packageFreelancers.freelancer', 'payments']);
         return response()->json(
             array_merge(
                 [
@@ -306,7 +321,7 @@ class BookingController extends Controller
 
     public function show(string $id): JsonResponse
     {
-        $booking = Booking::with(['user', 'listing', 'variant', 'slot'])->findOrFail($id);
+$booking = \App\Models\Booking::with(['user', 'listing.images', 'variant.packageItems.includedVariant.listing.images', 'slot', 'payments'])->findOrFail($id);
         Gate::authorize('view', $booking);
 
         return response()->json([
