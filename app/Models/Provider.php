@@ -28,9 +28,34 @@ class Provider extends Model
         'moderation_status',
         'rejection_reason',
         'qr_code_path',
-        'wallet_balance'
+        'wallet_balance',
+        'policy_accepted_at',
 
     ];
+
+    protected $casts = [
+        'policy_accepted_at' => 'datetime',
+        'is_active'          => 'boolean',
+        'is_verified'        => 'boolean',
+    ];
+
+    public function hasAcceptedPolicy(): bool
+    {
+        return ! is_null($this->policy_accepted_at);
+    }
+
+    public function subscriptions(): HasMany
+    {
+        return $this->hasMany(ProviderSubscription::class);
+    }
+
+    // آخر فترة اشتراك (الأحدث حسب current_period_ends_at)، تُستخدم من
+    // scheduler إيقاف التفعيل التلقائي عند انتهاء الاشتراك.
+    public function latestSubscription(): HasOne
+    {
+        return $this->hasOne(ProviderSubscription::class)->latestOfMany('current_period_ends_at');
+    }
+
     // في app/Models/Provider.php
     public function activeContracts()
     {

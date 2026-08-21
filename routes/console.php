@@ -11,3 +11,4 @@ use Illuminate\Support\Facades\Schedule;
 Schedule::command('auth:clean-unverified')->everyMinute();
 Schedule::command('bookings:expire-stale')->everyFiveMinutes();
 Schedule::command('providers:deactivate-expired-subscriptions')->daily();
+Schedule::command('bookings:expire-unpaid-accepted')->everyFiveMinutes();   // ← أضف هذا

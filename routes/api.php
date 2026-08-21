@@ -38,6 +38,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\AdminBookingController;
 use App\Http\Controllers\CompanyBlockedDateController;
 use App\Http\Controllers\AdminJobOfferController;
+use App\Http\Controllers\AdminProviderSubscriptionController;
 
 Route::middleware(['set_locale'])->group(function () {
 
@@ -279,7 +280,6 @@ Route::get('providers/{id}', [ProviderController::class, 'show']);
 // أضف هذه الـ routes إلى routes/api.php
 
 use App\Http\Controllers\ProviderPolicyController;
-use App\Http\Controllers\Admin\AdminProviderSubscriptionController;
 
 // ── مسار السياسة: يحتاج المزوّد يكون approved/active بس، بدون فحص
 //    الموافقة نفسها (لأن هاد بالضبط المسار يلي بيسمحله يوافق).
