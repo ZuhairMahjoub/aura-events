@@ -31,6 +31,9 @@ class BookingResource extends JsonResource
                 'listing_type' => $this->listing->listing_type ?? null, // صالة، تنسيق، منتج
             ],
 
+            'payment' => $this->relationLoaded('payments') && $this->payments->isNotEmpty() ? [
+                'payment_status' => $this->payments->last()->status,
+            ] : null,
             'variant'      => [
                 'id'   => $this->variant->id ?? null,
                 'name' => $this->variant->variant_name ?? null,
