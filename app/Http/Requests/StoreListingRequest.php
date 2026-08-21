@@ -67,7 +67,6 @@ class StoreListingRequest extends FormRequest
             $rules['variants.*.date_range']     = ['nullable', 'array'];
             $rules['variants.*.availabilities'] = ['nullable', 'array'];
         } elseif ($this->input('listing_type') === 'service' || $this->input('listing_type') === 'package' || $this->input('listing_type') === 'hall') {
-            // Fix #4: was a bare { } block, now correctly an elseif
             $rules['variants.*.stock_quantity'] = ['nullable', 'integer', 'min:0'];
             $rules['variants.*.capacity'] = ['nullable', 'integer', 'min:1'];
             $rules['variants.*.date_range']                    = ['nullable', 'array', 'required_without:variants.*.availabilities'];
