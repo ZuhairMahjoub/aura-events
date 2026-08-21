@@ -28,30 +28,30 @@ class BookingService
      * 2026_07_01_000001_fix_bookings_table_columns (إصلاح الخطأ ب).
      */
     private const VALID_CANCELLERS = ['organizer', 'provider', 'admin', 'system'];
- public function expireUnpaidAcceptedBookings(): int
+    public function expireUnpaidAcceptedBookings(): int
     {
         $staleBookingIds = Booking::where('status', 'accepted')
             ->whereNotNull('payment_due_at')
             ->where('payment_due_at', '<', now())
             ->pluck('id');
- 
+
         $expiredCount = 0;
- 
+
         foreach ($staleBookingIds as $bookingId) {
             DB::transaction(function () use ($bookingId, &$expiredCount) {
                 $booking = Booking::lockForUpdate()->find($bookingId);
- 
+
                 // إعادة الفحص جوا القفل: ممكن العميل يكون دفع بالضبط قبل ما
                 // توصل هالتشغيلة - فما لازم نلغيها بالغلط.
                 if (! $booking || $booking->status !== 'accepted' || ! $booking->payment_due_at || $booking->payment_due_at->isFuture()) {
                     return;
                 }
- 
+
                 $previousStatus = $booking->status;
- 
+
                 $this->releaseCapacity($booking);
                 $this->releaseFreelancerDateIfApplicable($booking);
- 
+
                 $booking->update([
                     'status'              => 'cancelled',
                     'cancelled_at'        => now(),
@@ -59,15 +59,15 @@ class BookingService
                     'cancellation_reason' => 'انتهت مهلة الدفع (' . config('booking.payment_timeout_hours') . ' ساعة) بعد قبول المزوّد دون تأكيد الدفع.',
                     'payment_due_at'      => null,
                 ]);
- 
+
                 $this->logTransition($booking, $previousStatus, 'cancelled', 'system', null, 'إلغاء تلقائي لعدم الدفع بعد القبول');
- 
-                DB::afterCommit(fn () => event(new BookingCancelled($booking)));
- 
+
+                DB::afterCommit(fn() => event(new BookingCancelled($booking)));
+
                 $expiredCount++;
             });
         }
- 
+
         return $expiredCount;
     }
     public function book(BookingData $data): Booking
@@ -580,6 +580,7 @@ class BookingService
                 'variant:id,variant_name,price,currency',
                 'slot:id,slot_name,start_time,end_time',
                 'provider:id,brand_name',
+                'payments:id,booking_id,status',   // ← جديد
             ])
             ->latest()
             ->paginate($perPage);
