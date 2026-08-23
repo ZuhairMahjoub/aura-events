@@ -1,0 +1,48 @@
+{
+    "logout_success": "تم تسجيل الخروج بنجاح.",
+    "account_not_verified": "عذراً، يجب تفعيل الحساب أولاً عبر الرابط المرسل لبريدك أو كود الـ OTP.",
+    
+    "notification_login_title": "تم تسجيل دخول جديد 🔒",
+    "notification_login_body": "تم الدخول إلى حسابك للتو. إذا لم تكن أنت، يرجى تأمين حسابك.",
+    "notification_welcome_title": "أهلاً بك في Aura Events! 🎉",
+    "notification_welcome_body": "تم إنشاء حسابك بنجاح. أهلاً بك معنا!",
+    "notification_google_login_title": "تم تسجيل دخول عبر جوجل 🔑",
+    "notification_google_login_body": "لقد قمت بتسجيل الدخول بنجاح باستخدام حساب جوجل الخاص بك.",
+    
+    "notif_booking_new_title": "طلب حجز جديد! 📅",
+    "notif_booking_new_body": "لديك طلب حجز جديد من :name",
+    "notif_booking_cancelled_title": "تم إلغاء الحجز",
+    "notif_booking_cancelled_body": "تم إلغاء الحجز رقم :id بنجاح.",
+    "notif_booking_accepted_title": "تم قبول حجزك! 🎉",
+    "notif_booking_accepted_body": "قام مزود الخدمة بقبول طلب الحجز الخاص بك.",
+    "notif_booking_completed_title": "الحجز مكتمل ✅",
+    "notif_booking_completed_body": "تم إتمام الحجز بنجاح. شكراً لثقتك بنا!",
+    "notif_booking_rejected_title": "تحديث بخصوص حجزك",
+    "notif_booking_rejected_body": "عذراً، تم رفض طلب حجزك. السبب: :reason",
+    "notif_booking_payment_due_title": "يجب الدفع خلال 3 أيام ⏳",
+"notif_booking_payment_due_body": "الرجاء إتمام الدفع خلال 3 أيام لتفادي إلغاء الحجز تلقائياً.",
+
+"notif_booking_accepted_provider_title": "تم قبول الطلب",
+"notif_booking_accepted_provider_body": "لقد قبلت طلب الحجز بنجاح.",
+
+"notif_booking_rejected_provider_title": "تم رفض الطلب",
+"notif_booking_rejected_provider_body": "لقد رفضت طلب الحجز.",
+
+"notif_booking_confirmed_title": "تم تأكيد الحجز ✅",
+"notif_booking_confirmed_body": "تم تأكيد حجزك بنجاح.",
+"notif_booking_confirmed_provider_title": "تم تأكيد الحجز",
+"notif_booking_confirmed_provider_body": "تم تأكيد الحجز الخاص بك رسمياً.",
+
+"notif_booking_completed_provider_title": "اكتملت الخدمة ✅",
+"notif_booking_completed_provider_body": "تم تسجيل اكتمال الخدمة بنجاح.",
+"notif_booking_cancelled_confirmation_title": "تم إلغاء الحجز",
+"notif_booking_cancelled_confirmation_body": "قمت بإلغاء الحجز رقم :id بنجاح.",
+
+"notif_booking_cancelled_provider_title": "تم إلغاء الحجز",
+"notif_booking_cancelled_provider_body": "قام العميل بإلغاء الحجز رقم :id.",
+
+"notif_booking_cancelled_confirmation_provider_title": "تم إلغاء الحجز",
+"notif_booking_cancelled_confirmation_provider_body": "قمت بإلغاء الحجز رقم :id بنجاح."
+
+
+}

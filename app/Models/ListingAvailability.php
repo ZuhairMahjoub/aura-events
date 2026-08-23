@@ -1,0 +1,40 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class ListingAvailability extends Model
+{
+    use HasUlids, HasFactory;
+
+    protected $keyType = 'string';
+    public $incrementing = false;
+
+    // Fix #6: Removed unused fields not in the migration
+    // (end_date, start_time, end_time, remaining_capacity)
+    protected $fillable = [
+        'listing_variant_id',
+        'available_date',
+        'is_blocked',
+    ];
+
+    protected $casts = [
+        'available_date' => 'date',
+        'is_blocked'     => 'boolean',
+    ];
+
+    public function variant(): BelongsTo
+    {
+        return $this->belongsTo(ListingVariant::class, 'listing_variant_id');
+    }
+
+    public function slots(): HasMany
+    {
+        return $this->hasMany(ListingSlot::class, 'listing_availability_id');
+    }
+}

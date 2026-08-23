@@ -34,5 +34,28 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    'google'=>[
+        'client_id'=>env('GOOGLE_CLIENT_ID'),
+        'client_secret'=>env('GOOGLE_CLIENT_SECRET'),
+        'redirect'=>env('GOOGLE_REDIRECT_URI'),
+        'android'=>env('ANDROID_GOOGLE_CLIENT_ID')
+    ],
+    
+    'ultramsg' => [
+    'instance_id' => env('ULTRAMSG_INSTANCE_ID'),
+    'token'       => env('ULTRAMSG_TOKEN'),
+    'base_url'    => env('ULTRAMSG_BASE_URL', 'https://api.ultramsg.com'),
+],
+
+   'firebase' => [
+        'credentials' => env('FIREBASE_CREDENTIALS'),
+    ],
+    'shamcash' => [
+    'url' => env('SHAMCASH_API_URL'),
+    'token' => env('SHAMCASH_TOKEN'),
+],
+
+
+    
 
 ];
