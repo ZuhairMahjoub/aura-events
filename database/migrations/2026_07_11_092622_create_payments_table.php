@@ -6,9 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
+    
     public function up(): void
     {
         Schema::create('payments', function (Blueprint $table) {
@@ -26,8 +24,7 @@ return new class extends Migration
             $table->string('proof_file_path')->nullable(); 
             
             // الحالة الافتراضية تكون pending حتى تتأكد أنت أو النظام من صحة الملف
-            $table->enum('status', ['pending', 'completed', 'failed', 'refunded'])->default('pending');
-            
+$table->enum('status', ['pending', 'confirmed', 'failed', 'refunded'])->default('pending');            
             // حقل للملاحظات في حال أردت كتابة سبب رفض الدفعة أو تعليق عليها
             $table->text('admin_notes')->nullable(); 
             
@@ -35,9 +32,7 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
+   
     public function down(): void
     {
         Schema::dropIfExists('payments');

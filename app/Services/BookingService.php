@@ -28,30 +28,30 @@ class BookingService
      * 2026_07_01_000001_fix_bookings_table_columns (إصلاح الخطأ ب).
      */
     private const VALID_CANCELLERS = ['organizer', 'provider', 'admin', 'system'];
-    public function expireUnpaidAcceptedBookings(): int
+ public function expireUnpaidAcceptedBookings(): int
     {
         $staleBookingIds = Booking::where('status', 'accepted')
             ->whereNotNull('payment_due_at')
             ->where('payment_due_at', '<', now())
             ->pluck('id');
-
+ 
         $expiredCount = 0;
-
+ 
         foreach ($staleBookingIds as $bookingId) {
             DB::transaction(function () use ($bookingId, &$expiredCount) {
                 $booking = Booking::lockForUpdate()->find($bookingId);
-
+ 
                 // إعادة الفحص جوا القفل: ممكن العميل يكون دفع بالضبط قبل ما
                 // توصل هالتشغيلة - فما لازم نلغيها بالغلط.
                 if (! $booking || $booking->status !== 'accepted' || ! $booking->payment_due_at || $booking->payment_due_at->isFuture()) {
                     return;
                 }
-
+ 
                 $previousStatus = $booking->status;
-
+ 
                 $this->releaseCapacity($booking);
                 $this->releaseFreelancerDateIfApplicable($booking);
-
+ 
                 $booking->update([
                     'status'              => 'cancelled',
                     'cancelled_at'        => now(),
@@ -59,15 +59,15 @@ class BookingService
                     'cancellation_reason' => 'انتهت مهلة الدفع (' . config('booking.payment_timeout_hours') . ' ساعة) بعد قبول المزوّد دون تأكيد الدفع.',
                     'payment_due_at'      => null,
                 ]);
-
+ 
                 $this->logTransition($booking, $previousStatus, 'cancelled', 'system', null, 'إلغاء تلقائي لعدم الدفع بعد القبول');
-
-                DB::afterCommit(fn() => event(new BookingCancelled($booking)));
-
+ 
+                DB::afterCommit(fn () => event(new BookingCancelled($booking)));
+ 
                 $expiredCount++;
             });
         }
-
+ 
         return $expiredCount;
     }
     public function book(BookingData $data): Booking
@@ -440,28 +440,25 @@ class BookingService
      * فحص تعارض لكل واحد فيهم أولاً (كلهم قبل أي إنشاء، لضمان عدم حجز جزئي لو
      * فشل واحد بالنص)، ثم حجزهم كلهم دفعة وحدة لو ما في أي تعارض.
      */
-    private function blockPackageFreelancersDate(Booking $booking): void
+  private function blockPackageFreelancersDate(Booking $booking): void
     {
-        $packageFreelancers = $booking->variant()->with('packageFreelancers')->first()?->packageFreelancers ?? collect();
+        // 🚀 الاعتماد على الـ snapshot المحفوظ في الحجز (الذي يحتوي المختارين فقط)
+        $bookingItems = collect($booking->metadata['booking_items'] ?? []);
+        $freelancers = $bookingItems->where('type', 'freelancer');
 
-        if ($packageFreelancers->isEmpty()) {
-            return;
-        }
+        if ($freelancers->isEmpty()) return;
 
         $startTime = $booking->booked_start_time;
         $endTime   = $booking->booked_end_time;
 
-        foreach ($packageFreelancers as $packageFreelancer) {
-            if (FreelancerBlockedDate::hasConflict($packageFreelancer->freelancer_id, $booking->booked_date, $startTime, $endTime)) {
-                throw new \DomainException(
-                    'أحد الفريلانسرز المشاركين بهذه الباقة لديه حجز أو حظر متعارض بنفس التاريخ والوقت بالفعل.'
-                );
+        foreach ($freelancers as $f) {
+            if (FreelancerBlockedDate::hasConflict($f['freelancer_id'], $booking->booked_date, $startTime, $endTime)) {
+                throw new \DomainException('تعارض في تاريخ الفريلانسر المختار.');
             }
         }
-
-        foreach ($packageFreelancers as $packageFreelancer) {
+        foreach ($freelancers as $f) {
             FreelancerBlockedDate::create([
-                'freelancer_id' => $packageFreelancer->freelancer_id,
+                'freelancer_id' => $f['freelancer_id'],
                 'blocked_date'  => $booking->booked_date,
                 'start_time'    => $startTime,
                 'end_time'      => $endTime,
@@ -506,17 +503,25 @@ class BookingService
         ]);
     }
 
-    private function calculatePrice(BookingData $data, Listing $listing): float
+ private function calculatePrice(BookingData $data, Listing $listing): float
     {
         $variant = $listing->variants->firstWhere('id', $data->variantId);
+        if (!$variant) return 0;
 
-        if (!$variant) {
-            throw new \DomainException("الـ Variant المطلوب لا ينتمي لهذا الـ Listing.");
+        $basePrice = (float) $variant->price;
+if ($listing->listing_type === 'physical_product') {
+            return $basePrice * $data->quantity;
+        }
+        $rawAttributes = json_decode($variant->getRawOriginal('dynamic_attributes'), true) ?? [];
+        $capacity = $variant->capacity ?: ($rawAttributes['capacity'] ?? 1);
+
+        if ($variant->price_type === 'fixed' && $capacity > 0) {
+            $pricePerGuest = $basePrice / $capacity;
+            return round($pricePerGuest * $data->quantity, 2);
         }
 
-        return (float) $variant->price * $data->quantity;
+        return $basePrice * $data->quantity;
     }
-
     /**
      * إصلاح حرج: كانت هذه الدالة تعتمد على match() صريح بقائمة أنواع مكرَّرة
      * يدوياً من BookingStrategyFactory، مع 'default => null' صامت. النتيجة:
@@ -586,19 +591,20 @@ class BookingService
             ->paginate($perPage);
     }
 
-    public function getProviderBookings(string $providerId, array $filters = [], int $perPage = 15)
+   public function getProviderBookings(string $providerId, array $filters = [], int $perPage = 15)
     {
         return Booking::query()
             ->where('provider_id', $providerId)
             ->when($filters['status'] ?? null, fn($q, $status) => $q->where('status', $status))
             ->when($filters['booking_type'] ?? null, fn($q, $type) => $q->where('booking_type', $type))
             ->with([
-                'user', // مين حجز (الزبون كاملاً: اسم، هاتف، إيميل)
+                'user', 
                 'slot',
                 'listing.images',
                 'listing.provider',
                 'variant.packageItems.includedVariant',
                 'variant.packageFreelancers.freelancer',
+                'payments', 
             ])
             ->latest()
             ->paginate($perPage);

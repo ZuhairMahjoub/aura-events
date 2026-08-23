@@ -38,7 +38,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\AdminBookingController;
 use App\Http\Controllers\CompanyBlockedDateController;
 use App\Http\Controllers\AdminJobOfferController;
-use App\Http\Controllers\AdminProviderSubscriptionController;
+use App\Http\Controllers\ProviderDashboardController;
 
 Route::middleware(['set_locale'])->group(function () {
 
@@ -275,31 +275,10 @@ Route::middleware(['auth:sanctum', 'role:provider'])->prefix('provider')->group(
 });
 Route::get('/chats/{firebaseChatId}/messages', [ChatController::class, 'getMessages']);
 Route::get('providers/{id}', [ProviderController::class, 'show']);
-
-
-// أضف هذه الـ routes إلى routes/api.php
-
-use App\Http\Controllers\ProviderPolicyController;
-
-// ── مسار السياسة: يحتاج المزوّد يكون approved/active بس، بدون فحص
-//    الموافقة نفسها (لأن هاد بالضبط المسار يلي بيسمحله يوافق).
-//    لذلك مجموعة middleware منفصلة، وليس approved_provider الكاملة.
-Route::middleware(['auth:sanctum', 'role:provider'])
-    ->prefix('provider')
-    ->group(function () {
-        Route::get('/policy', [ProviderPolicyController::class, 'show']);
-        Route::post('/policy/accept', [ProviderPolicyController::class, 'accept']);
-    });
-
-// ── باقي راوتات لوحة تحكم المزوّد (تحت approved_provider الكاملة، شاملة
-//    فحص السياسة) — موجودة أصلاً بالمشروع بنفس النمط، فقط تأكد أنها لا
-//    تشمل مسارات /provider/policy أعلاه (لأنها بمجموعة منفصلة).
-
-// ── مسارات الأدمن لتأكيد دفعة الاشتراك ──────────────────────────────────
-Route::middleware(['auth:sanctum', 'role:admin'])
-    ->prefix('admin/providers/{providerId}/subscriptions')
-    ->group(function () {
-        Route::get('/', [AdminProviderSubscriptionController::class, 'index']);
-        Route::post('/confirm-payment', [AdminProviderSubscriptionController::class, 'confirmPayment']);
-    });
 Route::post('/chat/users-info', [ChatController::class, 'getChatUsersInfo']);
+Route::middleware(['auth:sanctum', 'approved_provider'])->group(function () {
+    Route::get('/provider/dashboard/summary', [ProviderDashboardController::class, 'summary']);
+});
+Route::get('/listing-ratings', [ReviewController::class, 'summaries']);
+Route::get('/listings/{listing}/reviews', [ReviewController::class, 'index']);
+Route::get('/providers/{provider_id}/qr-code', [ProviderController::class, 'getProviderQrCode']);

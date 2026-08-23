@@ -7,9 +7,7 @@ use Illuminate\Support\Str;
 
 class SyncPackageItemsAction
 {
-    /**
-     * استبدال كامل (full replacement) لعناصر الباقة.
-     */
+    
     public function execute(string $variantId, array $items): void
     {
         PackageItem::where('package_variant_id', $variantId)->forceDelete();

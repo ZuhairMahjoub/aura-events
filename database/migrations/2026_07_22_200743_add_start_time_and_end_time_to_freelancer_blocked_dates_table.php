@@ -12,6 +12,8 @@ return new class extends Migration
             // 1. Add new columns
             $table->time('start_time')->nullable()->after('blocked_date');
             $table->time('end_time')->nullable()->after('start_time');
+            
+            $table->text('note')->nullable()->after('end_time'); 
 
             // 2. Add the non-unique index FIRST so MySQL foreign key has a backing index
             $table->index(['freelancer_id', 'blocked_date']);

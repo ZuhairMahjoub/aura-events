@@ -414,6 +414,32 @@ public function getQrCode(Request $request): JsonResponse
     /**
      * جلب رصيد محفظة المزوّد الحالي.
      */
+    public function getProviderQrCode($providerId)
+    {
+        // جلب بيانات المزود
+        $provider = \App\Models\Provider::find($providerId);
+
+        if (!$provider) {
+            return response()->json([
+                'success' => false,
+                'message' => 'المزود غير موجود.'
+            ], 404);
+        }
+
+        // التحقق مما إذا كان المزود قد رفع صورة الـ QR
+        if (!$provider->qr_code_path) {
+            return response()->json([
+                'success' => false,
+                'message' => 'هذا المزود لم يقم برفع كود QR بعد.'
+            ], 404);
+        }
+
+        // إرجاع الرابط الكامل لمبرمج الفلاتر
+        return response()->json([
+            'success' => true,
+            'qr_url' => asset('storage/' . $provider->qr_code_path)
+        ]);
+    }
     public function wallet(Request $request): JsonResponse
     {
         try {

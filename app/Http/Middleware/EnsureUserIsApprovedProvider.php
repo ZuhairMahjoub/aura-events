@@ -22,20 +22,13 @@ class EnsureUserIsApprovedProvider
              ], Response::HTTP_FORBIDDEN); 
          }
 
-         if ($user->providerProfile->moderation_status !== 'approved' || !$user->providerProfile->is_active) {
+         if ($user->providerProfile->moderation_status !== 'approved'||  !$user->providerProfile->is_active) {
              return response()->json([
                  'success' => false,
                  'message' => __('auth.provider_not_approved') 
              ], Response::HTTP_FORBIDDEN); 
          }
 
-         if (! $user->providerProfile->hasAcceptedPolicy()) {
-             return response()->json([
-                 'success' => false,
-                 'message' => 'يجب الموافقة على سياسة المنصة أولاً قبل المتابعة.',
-                 'error_code' => 'POLICY_NOT_ACCEPTED',
-             ], Response::HTTP_FORBIDDEN);
-         }
 
         return $next($request);
     }

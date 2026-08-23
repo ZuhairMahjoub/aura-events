@@ -17,12 +17,6 @@ class BulkInsertSlotsAction
         // double-booking حقيقية لنفس المكان الفيزيائي بنفس الوقت).
         $isHall = $availability->variant->listing->listing_type === 'hall';
 
-        // physical_product (hourly): كل slot جديد يبدأ بقيمة remaining_capacity
-        // مساوية لـ stock_quantity الحالي وقت إنشائه (snapshot ابتدائي، مش
-        // رصيد مشترك — راجع تعليق PhysicalProductBookingStrategy). الفرونت
-        // اند لا يرسل remaining_capacity لهذا النوع، فنعبّيها تلقائياً هنا.
-        $isPhysicalProduct = $availability->variant->listing->listing_type === 'physical_product';
-
         $sentSlotIds = collect($slotsData)
             ->pluck('id')
             ->filter()
@@ -54,28 +48,19 @@ class BulkInsertSlotsAction
             if (substr_count($endTime, ':') === 1) $endTime .= ':00';
 
             if (!empty($slotData['id'])) {
-                // تحديث الـ slot الموجود: لا نلمس remaining_capacity إطلاقاً
-                // إذا كان الـ slot موجوداً مسبقاً — قد يكون عليه حجوزات فعلية
-                // نقصت منه بالفعل، وإعادة تعبئته من stock_quantity ستمحو أثر
-                // تلك الحجوزات ضمنياً. نُحدّث فقط بيانات الوقت/الاسم.
+                // تحديث الـ slot الموجود
                 $availability->slots()->where('id', $slotData['id'])->update([
-                    'slot_name'  => $slotData['slot_name'] ?? $slotData['name'] ?? null,
-                    'start_time' => $startTime,
-                    'end_time'   => $endTime,
+                    'slot_name'          => $slotData['slot_name'] ?? $slotData['name'] ?? null,
+                    'start_time'         => $startTime,
+                    'end_time'           => $endTime,
+                    'remaining_capacity' => $isHall ? 1 : ($slotData['remaining_capacity'] ?? 1),
                 ]);
             } else {
-                // إنشاء slot جديد
-                $remainingCapacity = $isHall
-                    ? 1
-                    : ($isPhysicalProduct
-                        ? (int) ($availability->variant->stock_quantity ?? 0)
-                        : ($slotData['remaining_capacity'] ?? 1));
-
                 $availability->slots()->create([
                     'slot_name'          => $slotData['slot_name'] ?? $slotData['name'] ?? null,
                     'start_time'         => $startTime,
                     'end_time'           => $endTime,
-                    'remaining_capacity' => $remainingCapacity,
+                    'remaining_capacity' => $isHall ? 1 : ($slotData['remaining_capacity'] ?? 1),
                 ]);
             }
         }

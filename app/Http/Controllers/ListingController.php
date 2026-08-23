@@ -23,8 +23,7 @@ use App\Services\FirebaseNotificationService;
 class ListingController extends Controller
 {
     protected ListingService $listingService;
-
-  protected FirebaseNotificationService $notificationService;
+protected FirebaseNotificationService $notificationService;
 
     // 💡 تحديث الـ Constructor لحقن الخدمة
     public function __construct(
@@ -35,6 +34,7 @@ class ListingController extends Controller
         $this->listingService = $listingService;
         $this->notificationService = $notificationService;
     }
+   
     public function getCompanyInventory(Request $request): JsonResponse
     {
         $provider = $request->user()->providerProfile;
@@ -48,7 +48,7 @@ class ListingController extends Controller
 
         // 1. جلب الصالات (Halls) مع علاقاتها الخاصة (مثل الحجوزات أو الميزات إن وجدت)
         $halls = Listing::where('provider_id', $provider->id)
-            ->where('listing_type', 'hall') // ✅ فلتر النوع
+            ->where('listing_type', 'hall') 
             ->with(['images', 'category', 'district', 'variants.images', 'variants.availabilities.slots'])
             ->latest()
             ->get();
@@ -81,7 +81,7 @@ class ListingController extends Controller
         ], Response::HTTP_OK);
     }
 
- public function index(Request $request): JsonResponse
+public function index(Request $request): JsonResponse
 {
     $request->validate([
         'type' => 'sometimes|string|in:physical_product,service,hall,package',
@@ -107,7 +107,7 @@ class ListingController extends Controller
         ->setStatusCode(Response::HTTP_OK);
 }
 
-    public function store(StoreListingRequest $request): JsonResponse
+   public function store(StoreListingRequest $request): JsonResponse
     {
         Gate::authorize('create', Listing::class);
 
@@ -149,8 +149,7 @@ $listing = $this->listingService->createListingWithGraph($request->validated());
     public function update(UpdateListingRequest $request, Listing $listing)
     {
         $updatedListing = $this->listingService->updateListingWithGraph($listing, $request->validated());
-
-        $titleEn = $updatedListing->getTranslation('title', 'en');
+ $titleEn = $updatedListing->getTranslation('title', 'en');
 
         $this->notificationService->sendToUser(
             $request->user()->id,
@@ -171,17 +170,17 @@ $listing = $this->listingService->createListingWithGraph($request->validated());
         Gate::authorize('delete', $listing);
 
         try {
-     $titleEn = $listing->getTranslation('title', 'en');
+           $titleEn = $listing->getTranslation('title', 'en');
 
             $this->listingService->deleteListing($listing);
 
-            // ── 💡 إرسال إشعار بالإنجليزية (Deletion) ──
             $this->notificationService->sendToUser(
                 $request->user()->id,
                 'Listing Deleted Successfully',
                 "Your listing '{$titleEn}' has been permanently removed from the system.",
                 ['type' => 'listing_deleted']
             );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Listing deleted successfully.'

@@ -29,15 +29,10 @@ class UpdateArrangementAction
             $this->validateItems->execute($data['items'], $providerId);
         }
 
-        // الخطوة 8: إعادة فحص تعارض التواريخ عند التحديث.
-        // يجب الفحص في حالتين: 
-        // 1) إذا تم إرسال قائمة فريلانسرز جديدة.
-        // 2) أو إذا تم تغيير تواريخ التنسيق (availabilities/date_range) وكان هناك فريلانسرز مربوطون مسبقاً.
       $freelancersSent = array_key_exists('freelancers', $data);
         $freelancers = $data['freelancers'] ?? null;
         $newDates = $this->extractArrangementDates($data);
 
-        // إذا لم يتم إرسال freelancers إطلاقاً، نتحقق من الفريلانسرز الحاليين المرتبطين بالتنسيق
         if (!$freelancersSent && !empty($newDates)) {
             $variant = $listing->variants()->first();
             if ($variant) {
@@ -49,7 +44,6 @@ class UpdateArrangementAction
         }
       
         if (!empty($freelancers)) {
-            // نمرر التواريخ (سواء الجديدة أو الحالية إذا لم تتغير) للفحص
             $checkDates = !empty($newDates) ? $newDates : $this->getCurrentArrangementDates($listing);
             $this->validateFreelancers->execute($freelancers, $providerId, $checkDates);
         }
@@ -88,9 +82,6 @@ class UpdateArrangementAction
                 $this->syncFreelancers->execute($variant->id, $data['freelancers']);
             }
 
-            // ── مزامنة التواريخ والمواعيد: بنفس أولوية الـ Listing تماماً ──────
-            // - availabilities موجودة  → مزامنة مباشرة بالـ ID (تعديل/حذف آمن).
-            // - وإلا date_range موجود  → تفريد النطاق لأيام فردية ثم نفس المزامنة الآمنة.
             $defaultCapacity = $data['capacity'] ?? ($variant->dynamic_attributes['capacity'] ?? 1);
 
             if (!empty($data['availabilities'])) {
@@ -100,10 +91,7 @@ class UpdateArrangementAction
                 $this->syncAvailabilities->execute($variant, $availabilities, $defaultCapacity);
             }
 
-            // ── إدارة الصور بنفس منطق الـ Listing تماماً (3 حالات) ─────────────
-            // - images غير موجودة في الـ request  → لا تمس الصور.
-            // - images: []                         → احذف كل الصور.
-            // - images: [{id:...}, {path:...}]     → sync (احتفظ بالقديمة وارفع الجديدة).
+           
              if (isset($data['images']) && is_array($data['images'])) {
                 $images = $data['images'];
 
@@ -142,9 +130,7 @@ class UpdateArrangementAction
         });
     }
 
-    /**
-     * استخراج قائمة تواريخ التنسيق المسطّحة (Y-m-d) من البيانات المدخلة.
-     */
+    
     private function extractArrangementDates(array $data): array
     {
         if (!empty($data['availabilities'])) {
@@ -192,10 +178,7 @@ class UpdateArrangementAction
         return [];
     }
 
-    /**
-     * جلب النوافذ الزمنية الحالية المسجلة فعلياً للتنسيق بقاعدة البيانات
-     * (تاريخ + وقت كل slot موجود).
-     */
+    
     private function getCurrentArrangementDates(Listing $listing): array
     {
         $variant = $listing->variants()->first();

@@ -5,16 +5,13 @@ namespace App\Http\Controllers;
 use App\Services\JobOfferService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-// 💡 استيراد خدمة الإشعارات
 use App\Services\FirebaseNotificationService;
 
 class AdminJobOfferController extends Controller
 {
     protected JobOfferService $jobOfferService;
-    // 💡 1. تعريف خدمة الإشعارات
     protected FirebaseNotificationService $notificationService;
 
-    // 💡 تحديث الـ Constructor
     public function __construct(
         JobOfferService $jobOfferService,
         FirebaseNotificationService $notificationService
@@ -37,10 +34,8 @@ class AdminJobOfferController extends Controller
     {
         $jobOffer = $this->jobOfferService->approveJobOffer($id);
         
-        // 💡 تحميل المزود للوصول إلى User ID
         $jobOffer->load('provider');
 
-        // ── 💡 إرسال إشعار الموافقة بالإنجليزية ──
         $titleEn = is_array($jobOffer->title) ? ($jobOffer->title['en'] ?? current($jobOffer->title)) : $jobOffer->title;
         $userId = $jobOffer->provider->user_id;
 
@@ -66,10 +61,8 @@ class AdminJobOfferController extends Controller
 
         $jobOffer = $this->jobOfferService->rejectJobOffer($id, $request->rejection_reason);
         
-        // 💡 تحميل المزود للوصول إلى User ID
         $jobOffer->load('provider');
 
-        // ── 💡 إرسال إشعار الرفض بالإنجليزية ──
         $titleEn = is_array($jobOffer->title) ? ($jobOffer->title['en'] ?? current($jobOffer->title)) : $jobOffer->title;
         $userId = $jobOffer->provider->user_id;
 
@@ -86,4 +79,4 @@ class AdminJobOfferController extends Controller
             'data'    => $jobOffer,
         ], 200);
     }
-} 
+}

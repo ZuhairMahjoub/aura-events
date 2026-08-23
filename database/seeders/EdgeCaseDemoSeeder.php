@@ -138,7 +138,7 @@ class EdgeCaseDemoSeeder extends Seeder
         $serviceUnlinked = Service::create([
             'company_id' => $companyApproved->id, 'name' => 'دي جي وإضاءة',
             'description' => 'خدمة موسيقى وإضاءة احترافية.',
-        ]); // ⚠️ ما رح تنربط بأي job offer عمداً — لاختبار حذفها بنجاح (422 vs 200)
+        ]); //  ما رح تنربط بأي job offer عمداً — لاختبار حذفها بنجاح (422 vs 200)
 
         // ══════════════════════════════════════════════════════════════
         // 5) عروض الوظائف (JobOffers) — تغطية كل enum values + حافة service_id=null
@@ -165,7 +165,7 @@ class EdgeCaseDemoSeeder extends Seeder
             'contact_info' => 'hr@fakhama.test',
         ]);
 
-        // ⚠️ حافة: عرض وظيفة قديم بدون service_id (بيانات "قبل" ما صارت
+        //  حافة: عرض وظيفة قديم بدون service_id (بيانات "قبل" ما صارت
         // الخدمة إلزامية بالـ validation — العمود nullable بقصد بالـ DB).
         JobOffer::create([
             'company_id' => $companyApproved->id, 'service_id' => null,
@@ -225,10 +225,10 @@ class EdgeCaseDemoSeeder extends Seeder
         ListingSlot::create(['listing_availability_id' => $hallDate1->id, 'slot_name' => ['ar' => 'الفترة الصباحية', 'en' => 'Morning'], 'start_time' => '09:00:00', 'end_time' => '13:00:00', 'remaining_capacity' => 2]);
         ListingSlot::create(['listing_availability_id' => $hallDate1->id, 'slot_name' => ['ar' => 'الفترة المسائية', 'en' => 'Evening'], 'start_time' => '17:00:00', 'end_time' => '23:59:00', 'remaining_capacity' => 0]); // ⚠️ حافة: ممتلئة بالكامل
 
-        // ⚠️ حافة: تاريخ محظور بالكامل (is_blocked = true) بدون أي slots
+        //  حافة: تاريخ محظور بالكامل (is_blocked = true) بدون أي slots
         ListingAvailability::create(['listing_variant_id' => $hallVariant->id, 'available_date' => now()->addDays(25)->toDateString(), 'is_blocked' => true]);
 
-        // ⚠️ حافة: تاريخ بالماضي (بيانات قديمة قبل ما صار فيه after_or_equal:today بالتحقق)
+        //  حافة: تاريخ بالماضي (بيانات قديمة قبل ما صار فيه after_or_equal:today بالتحقق)
         $pastDate = ListingAvailability::create(['listing_variant_id' => $hallVariant->id, 'available_date' => now()->subDays(10)->toDateString(), 'is_blocked' => false]);
         ListingSlot::create(['listing_availability_id' => $pastDate->id, 'slot_name' => ['ar' => 'فترة قديمة', 'en' => 'Past slot'], 'start_time' => '10:00:00', 'end_time' => '14:00:00', 'remaining_capacity' => 5]);
 

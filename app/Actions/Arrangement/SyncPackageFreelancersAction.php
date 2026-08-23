@@ -7,9 +7,7 @@ use Illuminate\Support\Str;
 
 class SyncPackageFreelancersAction
 {
-    /**
-     * استبدال كامل لفريلانسرز الباقة (نفس منطق Items — كان ناقصاً بالكامل في update السابق).
-     */
+   
     public function execute(string $variantId, array $freelancers): void
     {
         PackageFreelancer::where('package_variant_id', $variantId)->delete();

@@ -17,9 +17,8 @@ class ValidatePackageFreelancersAction
      * @throws ValidationException (422)
      */
     /**
-     * @param  array  $arrangementWindows  نوافذ زمنية للتنسيق، كل عنصر:
-     *                                     ['date' => 'Y-m-d', 'start_time' => ?string, 'end_time' => ?string]
-     *                                     start_time/end_time = null يعني "اليوم كامل" (لا يوجد slot محدد).
+     * @param  array  :
+     *                                     
      *
      * @throws Exception (403)
      * @throws ValidationException (422)
@@ -63,7 +62,7 @@ class ValidatePackageFreelancersAction
     }
 
     /**
-     * ⚠️ تحديث: فحص تعارض حقيقي بمستوى الوقت (مش اليوم كامل بس)، بنفس
+     *  تحديث: فحص تعارض حقيقي بمستوى الوقت (مش اليوم كامل بس)، بنفس
      * منطق FreelancerBlockedDate::hasConflict() المستخدم بجهة الحجوزات —
      * عشان ما يصير نفس نوع المشكلة يلي انصلحت هناك (رفض تنسيق الساعة 9
      * صباحاً بسبب حجز مباشر الساعة 2 ظهراً بنفس اليوم، رغم عدم أي تداخل فعلي).

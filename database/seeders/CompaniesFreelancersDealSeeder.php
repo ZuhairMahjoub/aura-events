@@ -198,15 +198,7 @@ class CompaniesFreelancersDealSeeder extends Seeder
         return $freelancer;
     }
 
-    /**
-     * الـ capacity هون منولّدها بمدى مختلف حسب نوع العرض (hall/service)
-     * بدل ما تضل null، حتى تنعكس فعلياً بـ dynamic_attributes ويقدر
-     * الفرونت يفلتر عليها.
-     *
-     * ⚠️ هاد الجزء (array_filter الأخير بـ dynamic_attributes) هو نفسه
-     * اللي رجع يختفي بعد آخر git pull من نسخة قديمة لهذا الملف — لو رجعت
-     * capacity تطلع null بالـ API تاني، هون أول مكان تتأكد منه.
-     */
+   
     private function makeListingWithVariant(
         Provider $provider,
         string $type,
@@ -276,10 +268,7 @@ class CompaniesFreelancersDealSeeder extends Seeder
         return ['listing' => $listing, 'variant' => $variant, 'slot' => $slot];
     }
 
-    /**
-     * الـ capacity هون منربطها بعدد القطع المتوفرة فعلياً (stock).
-     * ⚠️ نفس التحذير أعلاه: تأكد إنو array_merge تحت لسا فيها 'capacity'.
-     */
+   
     private function makeChairsListing(Provider $provider, int $categoryId, int $districtId): array
     {
         $listing = Listing::create([

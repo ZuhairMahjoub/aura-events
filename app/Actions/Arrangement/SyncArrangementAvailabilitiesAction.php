@@ -7,26 +7,16 @@ use App\Models\ListingVariant;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 
-/**
- * مزامنة تواريخ/أوقات الباقة (Arrangement) بنفس منطق
- * SyncVariantAvailabilitiesAction الخاص بالـ Listing:
- * - مزامنة بالـ ID (إضافة/تعديل/حذف) بدل الحذف والإعادة الكاملة.
- * - حماية التواريخ والـ Slots التي عليها حجوزات نشطة من الحذف.
- * - منع تكرار نفس التاريخ لنفس الـ Variant.
- */
+
 class SyncArrangementAvailabilitiesAction
 {
     public function __construct(private BulkInsertSlotsAction $bulkInsertSlotsAction) {}
 
-    /**
-     * مزامنة قائمة تواريخ محدَّدة (كل عنصر قد يحمل id للحفاظ عليه).
-     */
+   
     public function execute(ListingVariant $variant, array $availabilitiesData, int $defaultCapacity = 1): void
     {
-        // قفل صف الـ variant لمنع التعارض عند التحديث المتزامن
         $variant = ListingVariant::lockForUpdate()->findOrFail($variant->id);
 
-        // استخدام السعة الخاصة بالـ variant كقيمة أساسية للـ slots إذا لم تُمرر
         $baseCapacity = $variant->capacity ?? $variant->stock_quantity ?? $defaultCapacity;
 
         $sentIds = collect($availabilitiesData)->pluck('id')->filter()->values()->toArray();
@@ -75,11 +65,8 @@ class SyncArrangementAvailabilitiesAction
                 ]);
             }
 
-            // تعديل ديناميكي لضمان أن الـ remaining_capacity يطابق سعة الباقة الحقيقية
-            // ולא يتم الاعتماد على أرقام قديمة أو سالبة عند إعادة مزامنة أو إنشاء المواعيد
             $slots = collect($availabilityData['slots'] ?? [])
                 ->map(function ($slot) use ($baseCapacity) {
-                    // إذا لم يتم إرسال remaining_capacity أو كانت سالبة، يتم ضبطها على السعة الأساسية للباقة
                     $incomingRemaining = $slot['remaining_capacity'] ?? null;
                     
                     if ($incomingRemaining === null || $incomingRemaining < 0) {
@@ -94,9 +81,7 @@ class SyncArrangementAvailabilitiesAction
         }
     }
 
-    /**
-     * تحويل نطاق زمني (date_range) إلى مصفوفة تواريخ فردية.
-     */
+    
     public function buildAvailabilitiesFromRange(array $range): array
     {
         $startDate = Carbon::parse($range['start_date'])->startOfDay();

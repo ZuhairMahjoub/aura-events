@@ -9,6 +9,14 @@ class BookingResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $freelancers = [];
+        if (is_array($this->metadata) && isset($this->metadata['booking_items'])) {
+            foreach ($this->metadata['booking_items'] as $item) {
+                if (isset($item['type']) && $item['type'] === 'freelancer') {
+                    $freelancers[] = $item['name'] ?? 'مستقل';
+                }
+            }
+        }
         return [
             'id'           => $this->id,
             'status'       => $this->status,
@@ -25,13 +33,18 @@ class BookingResource extends JsonResource
 
             'provider_id'  => $this->provider_id,
             'booked_date'  => $this->booked_date,
+'payment_id' => $this->relationLoaded('payments') ? $this->payments->last()?->id : null,
+            'booked_start_time' => $this->booked_start_time,
+            'booked_end_time'   => $this->booked_end_time,
+            'quantity'          => $this->quantity,
+            'metadata'          => $this->metadata,
+'freelancers'       => $freelancers, 
             'listing'      => [
                 'id'           => $this->listing->id ?? null,
                 'title'        => $this->listing->title ?? null,
                 'listing_type' => $this->listing->listing_type ?? null, // صالة، تنسيق، منتج
             ],
-
-            'payment' => $this->relationLoaded('payments') && $this->payments->isNotEmpty() ? [
+'payment' => $this->relationLoaded('payments') && $this->payments->isNotEmpty() ? [
                 'payment_status' => $this->payments->last()->status,
             ] : null,
             'variant'      => [

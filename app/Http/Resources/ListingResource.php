@@ -78,8 +78,7 @@ class ListingResource extends JsonResource
                             'id'             => $availability->id,
                             'available_date' => $availability->available_date,
                             'is_blocked'     => (bool) $availability->is_blocked,
-
-                            'slots' => $availability->relationLoaded('slots')
+                       'slots' => $availability->relationLoaded('slots')
                                 ? $availability->slots->map(fn($slot) => [
                                     'id'                 => $slot->id,
                                     'name'               => $slot->slot_name,
@@ -137,7 +136,7 @@ class ListingResource extends JsonResource
         }
 
         return $variants->filter(function ($variant) use ($min, $max) {
-            $capacity = $variant->capacity;
+            $capacity = $variant->dynamic_attributes['capacity'] ?? null;
 
             if ($capacity === null) {
                 return false;

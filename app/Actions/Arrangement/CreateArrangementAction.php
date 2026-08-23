@@ -76,8 +76,6 @@ class CreateArrangementAction
                 $this->attachImages($data['images'], $listing);
             }
 
-            // ملاحظة: تبقى علاقة availabilities.slots كما هي لأننا في النهاية
-            // نقوم بفرد النطاق الزمني وحفظه كأيام منفصلة داخل قاعدة البيانات.
             return $listing->load([
                 'variants.packageItems.includedVariant.listing.images',
                 'variants.packageFreelancers.freelancer',
@@ -89,11 +87,7 @@ class CreateArrangementAction
         });
     }
 
-    /**
-     * الخطوة 7: استخراج قائمة تواريخ التنسيق المسطّحة (Y-m-d) من إما
-     * availabilities الصريحة أو date_range، حتى نفحص تعارضها مع روزنامة
-     * الفريلانسر قبل أي حفظ فعلي.
-     */
+   
     private function extractArrangementDates(array $data): array
     {
         if (! empty($data['availabilities'])) {
@@ -144,17 +138,12 @@ class CreateArrangementAction
     private function attachImages(array $tempPaths, Listing $listing): void
     {
         foreach ($tempPaths as $path) {
-            // هنا يتم التقاط حقل path القادم من الـ JSON الجديد
             $cleanPath = is_array($path) ? ($path['path'] ?? null) : $path;
 
             if (empty($cleanPath)) {
                 continue;
             }
 
-            // إصلاح: نفس منطق CreateListingAction — تطبيع المسار بإضافة
-            // 'temp/' إذا لم يكن موجوداً. بدون هذا، أي مسار يصل بدون البريفكس
-            // (فقط اسم الملف) يفشل بصمت في file_exists() ويتم تجاوز الصورة
-            // دون أي خطأ ظاهر للمستخدم — وهو تحديداً ما كان يحدث هنا.
             $cleanPath = \Illuminate\Support\Str::startsWith($cleanPath, 'temp/')
                 ? $cleanPath
                 : 'temp/' . $cleanPath;
